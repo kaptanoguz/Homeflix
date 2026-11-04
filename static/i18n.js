@@ -5,6 +5,8 @@
    Titles, plots and other details from TMDb stay in the language the server fetched them in. */
 const LANG = (() => { try { return JSON.parse(localStorage.getItem('lang')) === 'en' ? 'en' : 'tr'; } catch { return 'tr'; } })();
 const LOCALE = LANG === 'en' ? 'en-GB' : 'tr-TR';
+// The server sends titles, descriptions and genres in the language it finds in this cookie.
+try { document.cookie = 'hf_lang=' + LANG + '; path=/; max-age=31536000; samesite=lax'; } catch {}
 
 const EN = {
   // navigation and page titles
@@ -78,7 +80,7 @@ const EN = {
     'All downloads together stay under this speed. Each device can download one file at a time.',
   'Kaydedilemedi': 'Could not save', 'İndirme sınırı {v} Mbit/sn': 'Download limit {v} Mbit/s',
   // settings page: categories, rows and tiles
-  'İndirmeler': 'Downloads', 'Diğer cihazlar': 'Other devices', 'Hakkında': 'About',
+  'İndirmeler': 'Downloads', 'Diğer cihazlar': 'Other devices', 'Hakkında': 'About', 'Depo': 'Repository', 'Sürüm': 'Version',
   'Klasörler, tarama ve eksik film bilgileri.': 'Folders, scanning and missing movie details.',
   'Altyazının görünüşü ve kendiliğinden açılması.': 'How subtitles look and when they turn on by themselves.',
   'Rastgele film düğmesinin hangi filmlerden seçeceği.': 'Which movies the random movie button picks from.',

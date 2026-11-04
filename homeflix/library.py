@@ -146,7 +146,10 @@ def _scan(settings):
                           "ep_name = CASE WHEN episodes.season = excluded.season AND episodes.episode = excluded.episode "
                           "THEN episodes.ep_name END, ep_overview = CASE WHEN episodes.season = excluded.season AND "
                           "episodes.episode = excluded.episode THEN episodes.ep_overview END, still = CASE WHEN "
-                          "episodes.season = excluded.season AND episodes.episode = excluded.episode THEN episodes.still END",
+                          "episodes.season = excluded.season AND episodes.episode = excluded.episode THEN episodes.still END, "
+                          "ep_name_en = CASE WHEN episodes.season = excluded.season AND episodes.episode = excluded.episode "
+                          "THEN episodes.ep_name_en END, ep_overview_en = CASE WHEN episodes.season = excluded.season AND "
+                          "episodes.episode = excluded.episode THEN episodes.ep_overview_en END",
                           (sid, name, season, episode, fname, path, fname))
         for r in c.execute("SELECT id, path FROM episodes").fetchall():
             if r['path'] not in ep_paths and (_under(r['path'], scanned) or not _under(r['path'], series_dirs)):

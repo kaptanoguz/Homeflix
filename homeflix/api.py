@@ -16,6 +16,7 @@ from . import downloads, library, livetv, media, metadata, online, state, subtit
 from .config import BASE_DIR, ONLINE_EMBED, POSTERS_DIR
 from .db import LOCAL_VIEWER, library_dirs, load_settings, save_settings, session
 from .names import EXTRA_BASE, extra_title, fold, sequel_key
+from .version import get_version
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, 'templates'),
             static_folder=os.path.join(BASE_DIR, 'static'))
@@ -25,6 +26,34 @@ downloads.set_limit(settings.get('download_mbps', downloads.DEFAULT_MBPS))
 
 
 VIEWER_COOKIE = 'hf_viewer'
+
+
+_LEAD_WORDS = {'and', 'the', 'of', 'a', 'an', '&', 'in', 'to', 'for', 'vs', 'vs.'}
+
+
+def _common_words(titles):
+    """The words every title starts with ('Toy Story', 'Toy Story 2' -> 'Toy Story'), without dangling 'and', 'the'..."""
+    split = [t.split() for t in titles if t]
+    if len(split) != len(titles) or not split:
+        return ''
+    n = 0
+    for words in zip(*split):
+        if len({w.lower() for w in words}) > 1:
+            break
+        n += 1
+    out = split[0][:n]
+    while out and (out[-1].lower().strip(':-–,.') in _LEAD_WORDS or not out[-1].strip(':-–,.')):
+        out.pop()
+    return ' '.join(out).strip(' :-–,.')
+
+
+def request_lang():
+    """'en' when this device's web app is switched to English (it keeps the choice in the hf_lang cookie), else 'tr'."""
+    return 'en' if request.cookies.get('hf_lang') == 'en' else 'tr'
+
+
+def epcode(season, episode):
+    return f"S{season}:{'E' if request_lang() == 'en' else 'B'}{episode}"
 
 
 def viewer():
@@ -132,10 +161,10 @@ def kids_lists():
     return tuple(out)
 
 
-def build_library():
+def build_library(lang='tr'):
     with session() as c:
         movies = c.execute("SELECT id, title, original_title, year, rating, genre, plot, runtime, added_at, size, "
-                           "tmdb_id, collection_id, poster, backdrop, cert FROM movies").fetchall()
+                           "tmdb_id, collection_id, poster, backdrop, cert, title_en, plot_en FROM movies").fetchall()
         shows = c.execute("SELECT s.*, COUNT(e.id) AS eps FROM series s LEFT JOIN episodes e ON e.series_id = s.id "
                           "GROUP BY s.id").fetchall()
         ep_keys = defaultdict(set)
@@ -153,6 +182,7 @@ def build_library():
                 'p': m['plot'] or '', 'rt': m['runtime'] or 0, 'add': m['added_at'] or 0, 'sz': m['size'] or 0,
                 'tm': m['tmdb_id'] or 0, 'ph': _pv(m['poster']), 'bd': bool(m['backdrop']), 'c': None,
                 'k': is_kids(m['genre'], m['cert'], m['tmdb_id'], kids_in, kids_out)}
+        item['_en'] = (m['title_en'], m['plot_en'])
         out_movies.append(item)
         if m['collection_id'] and m['collection_id'] in cols:
             by_col[m['collection_id']].append(item)
@@ -191,6 +221,20 @@ def build_library():
         name = next((i['t'] for i in items if fold(i['t']).strip() == base), None) or \
             ' '.join(first['t'].split()[:len(base.split())])
         add_collection(f"h-{base.replace(' ', '-')}", name, items)
+    by_id = {i['id']: i for i in out_movies}
+    if lang == 'en':
+        for col in collections:
+            row = cols.get(col['id'])
+            if row is not None:  # a TMDb collection
+                col['name'] = row['name_en'] or col['name']
+                col['ov'] = row['overview_en'] or col['ov']
+            else:  # a group made from the titles: the words its English titles share
+                col['name'] = _common_words([(by_id[x]['_en'][0] or '').strip() for x in col['items']]) or col['name']
+    for i in out_movies:
+        t_en, p_en = i.pop('_en')
+        if lang == 'en':
+            i['t'] = t_en or i['t']
+            i['p'] = p_en or i['p']
     collections.sort(key=lambda c: fold(c['name']))
 
     show_groups = defaultdict(list)
@@ -202,9 +246,12 @@ def build_library():
         s = group[0]
         keys = set().union(*(ep_keys[g['id']] for g in group))
         out_series.append({
-            'id': s['id'], 'ids': [g['id'] for g in group], 't': s['display_title'] or s['title'],
+            'id': s['id'], 'ids': [g['id'] for g in group],
+            't': (s['title_en'] if lang == 'en' and s['title_en'] else s['display_title'] or s['title']),
             'ot': s['original_title'] or '', 'y': s['year'] or '',
-            'r': s['rating'] if s['rating'] not in (None, '', 'N/A') else '', 'g': s['genre'] or '', 'p': s['plot'] or '',
+            'r': s['rating'] if s['rating'] not in (None, '', 'N/A') else '',
+            'g': s['genre'] or '',
+            'p': ((s['plot_en'] or s['plot'] or '') if lang == 'en' else s['plot'] or ''),
             'add': max(g['added_at'] or 0 for g in group), 'tm': s['tmdb_id'] or 0,
             'ph': _pv(s['poster']), 'bd': bool(s['backdrop']),
             'eps': len([k for k in keys if k[0]]) or len(keys), 'seasons': len({k[0] for k in keys if k[0]}) or 1, 'k': is_kids(s['genre'], s['cert'], s['tmdb_id'], kids_in_tv, kids_out_tv)})
@@ -221,7 +268,7 @@ def index():
 
 @app.route('/api/library')
 def api_library():
-    return jsonify(build_library())
+    return jsonify(build_library(request_lang()))
 
 
 @app.route('/api/status')
@@ -239,7 +286,8 @@ def api_series(sid):
         if s['tmdb_id']:
             ids += [r['id'] for r in c.execute("SELECT id FROM series WHERE tmdb_id = ? AND id != ?", (s['tmdb_id'], sid))]
         order = {v: i for i, v in enumerate(ids)}
-        rows = c.execute(f"SELECT id, series_id, season, episode, filename, ep_name, ep_overview, still, runtime FROM episodes "
+        rows = c.execute(f"SELECT id, series_id, season, episode, filename, ep_name, ep_overview, ep_name_en, ep_overview_en, "
+                         f"still, runtime FROM episodes "
                          f"WHERE series_id IN ({','.join('?' * len(ids))})", ids).fetchall()
         rows = sorted(rows, key=lambda e: (e['season'], e['episode'], order[e['series_id']], e['filename']))
         seen, eps = set(), []
@@ -248,24 +296,28 @@ def api_series(sid):
                 continue
             seen.add((e['season'], e['episode'], e['filename']))
             eps.append(e)
-        fetched = {r['season'] for r in c.execute("SELECT season FROM season_fetch WHERE series_id = ?", (sid,))}
+        en = request_lang() == 'en'
+        fetched = {r['season'] for r in c.execute(
+            f"SELECT season FROM season_fetch WHERE series_id = ? AND {'en_at' if en else 'fetched_at'} IS NOT NULL", (sid,))}
         prog = {r['key']: r for r in c.execute("SELECT * FROM progress WHERE viewer = ? AND key LIKE 'e:%'", (viewer(),))}
     seasons = defaultdict(list)
     for e in eps:
         p = prog.get(f"e:{e['id']}")
-        name = e['ep_name'] or ''
+        # English mode shows the English name and description; until they are fetched, the Turkish ones.
+        name = (e['ep_name_en'] if en else '') or e['ep_name'] or ''
         if not name and e['season'] == 0 and e['episode'] >= EXTRA_BASE:
             name = extra_title(e['filename'])
         seasons[e['season']].append({
             'id': e['id'], 'n': e['episode'], 'x': e['episode'] >= EXTRA_BASE, 'name': name, 'file': e['filename'],
-            'ov': e['ep_overview'] or '', 'still': bool(e['still']), 'rt': e['runtime'] or 0,
+            'ov': (e['ep_overview_en'] if en else '') or e['ep_overview'] or '', 'still': bool(e['still']), 'rt': e['runtime'] or 0,
             'pos': p['position'] if p else 0, 'dur': p['duration'] if p else 0, 'fin': bool(p and p['finished']),
             'at': p['updated_at'] if p else 0})
     pending = []
     if s['tmdb_id']:
         pending = [n for n in seasons if n not in fetched]
         for n in pending:
-            threading.Thread(target=metadata.fetch_season, args=(sid, s['tmdb_id'], n, ids), daemon=True).start()
+            threading.Thread(target=metadata.fetch_season, args=(sid, s['tmdb_id'], n, ids, 'en' if en else 'tr'),
+                             daemon=True).start()
     # Season 0 (specials and extras) comes last.
     order_s = sorted(seasons, key=lambda n: (n == 0, n))
     return jsonify({'id': sid, 'seasons': [{'n': n, 'eps': seasons[n]} for n in order_s], 'pending': bool(pending)})
@@ -277,12 +329,14 @@ def api_credits(kind, iid):
     if not table:
         abort(404)
     with session() as c:
-        r = c.execute(f"SELECT tmdb_id FROM {table} WHERE id = ?", (iid,)).fetchone()
+        r = c.execute(f"SELECT tmdb_id, tagline_en FROM {table} WHERE id = ?", (iid,)).fetchone()
     if not r:
         abort(404)
     data = metadata.credits('movie' if kind == 'm' else 'tv', r['tmdb_id']) if r['tmdb_id'] else {}
     if data is None:
         abort(503)
+    if request_lang() == 'en' and r['tagline_en']:
+        data = {**data, 'tagline': r['tagline_en']}
     return jsonify(data)
 
 
@@ -326,6 +380,7 @@ def api_user():
 
 def continue_watching():
     out = []
+    en = request_lang() == 'en'
     with session() as c:
         rows = c.execute("SELECT * FROM progress WHERE viewer = ? ORDER BY updated_at DESC LIMIT 60", (viewer(),)).fetchall()
         seen_series = set()
@@ -344,12 +399,12 @@ def continue_watching():
             if kind == 'm':
                 if r['finished'] or (r['position'] or 0) < 60:
                     continue
-                m = c.execute("SELECT id, title FROM movies WHERE id = ?", (iid,)).fetchone()
+                m = c.execute("SELECT id, title, title_en FROM movies WHERE id = ?", (iid,)).fetchone()
                 if m:
-                    out.append({'kind': 'm', 'id': iid, 'mid': iid, 'title': m['title'], 'sub': '',
+                    out.append({'kind': 'm', 'id': iid, 'mid': iid, 'title': (m['title_en'] if en else '') or m['title'], 'sub': '',
                                 'pos': r['position'], 'dur': r['duration'], 'at': r['updated_at']})
             elif kind == 'e':
-                e = c.execute("SELECT e.*, COALESCE(s.display_title, s.title) AS stitle FROM episodes e "
+                e = c.execute("SELECT e.*, COALESCE(s.display_title, s.title) AS stitle, s.title_en AS stitle_en FROM episodes e "
                               "JOIN series s ON s.id = e.series_id WHERE e.id = ?", (iid,)).fetchone()
                 if not e:
                     continue
@@ -365,10 +420,12 @@ def continue_watching():
                     if not target:
                         continue
                     pos, dur = 0, 0
-                label = f"S{target['season']}:B{target['episode']}"
-                if target['ep_name']:
-                    label += f" · {target['ep_name']}"
-                out.append({'kind': 'e', 'id': target['id'], 'sid': e['series_id'], 'title': e['stitle'], 'sub': label,
+                label = epcode(target['season'], target['episode'])
+                ep_name = (target['ep_name_en'] if en else '') or target['ep_name']
+                if ep_name:
+                    label += f" · {ep_name}"
+                out.append({'kind': 'e', 'id': target['id'], 'sid': e['series_id'],
+                            'title': (e['stitle_en'] if en else '') or e['stitle'], 'sub': label,
                             'pos': pos, 'dur': dur, 'at': r['updated_at'], 'up_next': target['id'] != e['id']})
             if len(out) >= 20:
                 break
@@ -483,6 +540,7 @@ def media_path(kind, iid):
 def api_media(kind, iid):
     path = media_path(kind, iid)
     info = media.probe(path)
+    en = request_lang() == 'en'
     out = {'kind': kind, 'id': iid, 'direct': info['direct'], 'duration': info['duration'], 'audio': info['audio'],
            'subs': [s for s in info['subs'] if s['text']],
            'local_subs': [{'index': s['index'], 'label': s['label'], 'lang': s['lang']} for s in subtitles.local_subtitles(path)],
@@ -492,17 +550,18 @@ def api_media(kind, iid):
         p = c.execute("SELECT * FROM progress WHERE viewer = ? AND key = ?", (viewer(), f"{kind}:{iid}")).fetchone()
         out['resume'] = p['position'] if p and not p['finished'] else 0
         if kind == 'm':
-            m = c.execute("SELECT title, year FROM movies WHERE id = ?", (iid,)).fetchone()
-            out.update(title=m['title'], sub=m['year'] or '')
+            m = c.execute("SELECT title, year, title_en FROM movies WHERE id = ?", (iid,)).fetchone()
+            out.update(title=(m['title_en'] if en else '') or m['title'], sub=m['year'] or '')
         else:
-            e = c.execute("SELECT e.*, COALESCE(s.display_title, s.title) AS stitle FROM episodes e "
+            e = c.execute("SELECT e.*, COALESCE(s.display_title, s.title) AS stitle, s.title_en AS stitle_en FROM episodes e "
                           "JOIN series s ON s.id = e.series_id WHERE e.id = ?", (iid,)).fetchone()
-            out.update(title=e['stitle'], sid=e['series_id'],
-                       sub=f"S{e['season']}:B{e['episode']}" + (f" · {e['ep_name']}" if e['ep_name'] else ''))
+            ep_name = (e['ep_name_en'] if en else '') or e['ep_name']
+            out.update(title=(e['stitle_en'] if en else '') or e['stitle'], sid=e['series_id'],
+                       sub=epcode(e['season'], e['episode']) + (f" · {ep_name}" if ep_name else ''))
             nxt = next_episode(c, e)
             if nxt:
-                out['next'] = {'id': nxt['id'], 'label': f"S{nxt['season']}:B{nxt['episode']}",
-                               'name': nxt['ep_name'] or '', 'still': bool(nxt['still'])}
+                out['next'] = {'id': nxt['id'], 'label': epcode(nxt['season'], nxt['episode']),
+                               'name': (nxt['ep_name_en'] if en else '') or nxt['ep_name'] or '', 'still': bool(nxt['still'])}
     return jsonify(out)
 
 
@@ -897,7 +956,7 @@ def api_settings():
     private = {k: settings.get(k, '') if local else '' for k in ('movie_dir', 'series_dir', 'omdb_api_key')}
     for kind in ('movie', 'series'):
         private[f'{kind}_dirs'] = library_dirs(settings, kind) if local else []
-    return jsonify({**private, 'local': local, 'stats': stats, 'download_mbps': downloads.limit_mbps(), 'urls': [f"http://{ip}:{PORT}" for ip in lan_ips()]})
+    return jsonify({**private, 'local': local, 'stats': stats, 'download_mbps': downloads.limit_mbps(), 'version': get_version(), 'urls': [f"http://{ip}:{PORT}" for ip in lan_ips()]})
 
 
 def _browse_roots():

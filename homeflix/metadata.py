@@ -230,6 +230,8 @@ def enrich_movie(row):
             return
         d = tmdb(f"/movie/{tmdb_id}", append_to_response='release_dates') or {}
         fields = {'tmdb_id': tmdb_id, 'enriched': 1, 'cert': movie_cert(d)}
+        if row['tmdb_id'] != tmdb_id:
+            fields['title_en'] = None  # another title now: its English text is fetched again
         if d.get('runtime'):
             fields['runtime'] = d['runtime']
         if d.get('imdb_id') and not row['imdb_id']:
@@ -281,6 +283,8 @@ def enrich_series(row):
             return
         d = tmdb(f"/tv/{tmdb_id}", append_to_response='content_ratings') or {}
         fields = {'tmdb_id': tmdb_id, 'enriched': 1, 'cert': tv_cert(d)}
+        if row['tmdb_id'] != tmdb_id:
+            fields['title_en'] = None
         if d.get('backdrop_path'):
             fields['backdrop'] = d['backdrop_path']
         if d.get('original_name'):
@@ -299,6 +303,66 @@ def enrich_series(row):
         c.execute(f"UPDATE series SET {', '.join(k + ' = ?' for k in fields)} WHERE id = ?",
                   list(fields.values()) + [row['id']])
         _ensure_poster(c, 'series', 'series', row, d.get('poster_path'))
+
+
+# ---- English text (for the web app's English mode): titles, plots and taglines in TMDb's en-US, saved next
+# to the Turkish ones. Fetched slowly in the background after the main enrichment, once per title.
+
+EN_LANG = 'en-US'
+
+
+def _english_fields(d):
+    title = (d.get('title') or d.get('name') or d.get('original_title') or d.get('original_name') or '').strip()
+    return [title, d.get('overview') or '', d.get('tagline') or '']
+
+
+def fetch_english(kind, tmdb_id):
+    """kind: 'movie' or 'tv'. A title TMDb doesn't know (404) is saved empty, so it isn't asked for again."""
+    d = tmdb(f"/{kind}/{tmdb_id}", language=EN_LANG) or {}
+    table = 'movies' if kind == 'movie' else 'series'
+    with session() as c:
+        c.execute(f"UPDATE {table} SET title_en = ?, plot_en = ?, tagline_en = ? WHERE tmdb_id = ?",
+                  (*_english_fields(d), tmdb_id))
+
+
+def fetch_english_collection(cid):
+    d = tmdb(f"/collection/{cid}", language=EN_LANG) or {}
+    with session() as c:
+        c.execute("UPDATE collections SET name_en = ?, overview_en = ? WHERE id = ?",
+                  (clean_collection_name(d.get('name')), d.get('overview') or '', cid))
+
+
+def english_pass():
+    """Fetches the English text of every title that doesn't have it yet. Stops quietly when TMDb can't be reached."""
+    with session() as c:
+        jobs = [('movie', r['tmdb_id']) for r in c.execute(
+            "SELECT DISTINCT tmdb_id FROM movies WHERE tmdb_id IS NOT NULL AND title_en IS NULL")]
+        jobs += [('tv', r['tmdb_id']) for r in c.execute(
+            "SELECT DISTINCT tmdb_id FROM series WHERE tmdb_id IS NOT NULL AND title_en IS NULL")]
+        jobs += [('collection', r['id']) for r in c.execute("SELECT id FROM collections WHERE name_en IS NULL")]
+    if not jobs:
+        return
+    state.enrich.update(done=0, total=len(jobs))
+    failures = 0
+    for i, (kind, ident) in enumerate(jobs):
+        try:
+            if kind == 'collection':
+                fetch_english_collection(ident)
+            else:
+                fetch_english(kind, ident)
+            failures = 0
+        except NetworkError as e:
+            failures += 1
+            if failures >= 5:
+                print(f"İngilizce bilgiler: ağ hatası, sonra tekrar denenecek ({e})")
+                return
+        except Exception as e:
+            print(f"İngilizce bilgi hatası ({kind} {ident}): {e}")
+        state.enrich['done'] = i + 1
+        if (i + 1) % 100 == 0:
+            state.bump()
+        time.sleep(0.1)
+
 
 
 def enricher_loop():
@@ -335,6 +399,10 @@ def enricher_loop():
                 time.sleep(0.05)
         except Exception as e:
             print(f"Koleksiyon hatası: {e}")
+        try:
+            english_pass()
+        except Exception as e:
+            print(f"İngilizce bilgi hatası: {e}")
         state.enrich.update(done=0, total=0)
         state.bump()
         state.credits_wake.set()
@@ -538,22 +606,31 @@ _season_jobs = set()
 _season_lock = threading.Lock()
 
 
-def fetch_season(series_id, tmdb_id, season, ids=None):
-    key = (series_id, season)
+def fetch_season(series_id, tmdb_id, season, ids=None, lang='tr'):
+    """Episode names, descriptions, stills and runtimes of a season, in Turkish or (lang='en') English."""
+    key = (series_id, season, lang)
     with _season_lock:
         if key in _season_jobs:
             return
         _season_jobs.add(key)
+    en = lang == 'en'
     try:
-        d = tmdb(f"/tv/{tmdb_id}/season/{season}")
+        d = tmdb(f"/tv/{tmdb_id}/season/{season}", language=EN_LANG) if en else tmdb(f"/tv/{tmdb_id}/season/{season}")
         with session() as c:
             for ep in (d or {}).get('episodes') or []:
                 for sid in ids or [series_id]:
-                    c.execute("UPDATE episodes SET ep_name = ?, ep_overview = ?, still = ?, runtime = ? "
-                              "WHERE series_id = ? AND season = ? AND episode = ? AND episode < 1000",
-                              (ep.get('name'), ep.get('overview'), ep.get('still_path'), ep.get('runtime'),
-                               sid, season, ep.get('episode_number')))
-            c.execute("INSERT OR REPLACE INTO season_fetch (series_id, season, fetched_at) VALUES (?, ?, ?)",
+                    if en:
+                        c.execute("UPDATE episodes SET ep_name_en = ?, ep_overview_en = ? "
+                                  "WHERE series_id = ? AND season = ? AND episode = ? AND episode < 1000",
+                                  (ep.get('name') or '', ep.get('overview') or '', sid, season, ep.get('episode_number')))
+                    else:
+                        c.execute("UPDATE episodes SET ep_name = ?, ep_overview = ?, still = ?, runtime = ? "
+                                  "WHERE series_id = ? AND season = ? AND episode = ? AND episode < 1000",
+                                  (ep.get('name'), ep.get('overview'), ep.get('still_path'), ep.get('runtime'),
+                                   sid, season, ep.get('episode_number')))
+            col = 'en_at' if en else 'fetched_at'
+            c.execute(f"INSERT INTO season_fetch (series_id, season, {col}) VALUES (?, ?, ?) "
+                      f"ON CONFLICT(series_id, season) DO UPDATE SET {col} = excluded.{col}",
                       (series_id, season, time.time()))
     except Exception as e:
         print(f"Sezon bilgisi alınamadı: {e}")

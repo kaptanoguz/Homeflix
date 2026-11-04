@@ -56,6 +56,11 @@ jobs:
           python -m pip install flask waitress requests pillow pyinstaller
           if [ "$RUNNER_OS" != "Linux" ]; then python -m pip install pywebview; fi
 
+      # Settings > About reads the version from this file.
+      - name: Write version
+        shell: bash
+        run: echo "$HOMEFLIX_VERSION" > VERSION
+
       - name: Build
         run: |
           python packaging/make_icon.py build/icons
