@@ -65,9 +65,36 @@ def clean_series_name(folder_name):
     return name or folder_name
 
 
+# Folders and Plex/Jellyfin file suffixes that hold a series' extras rather than episodes. Extras go to season 0.
+EXTRAS_DIR_RE = re.compile(r'^(specials?|extras?|featurettes?|behind[ ._-]?the[ ._-]?scenes|deleted[ ._-]?scenes|interviews?|'
+                           r'scenes|shorts|trailers?|bonus|other|ekstra(lar)?|özel(ler)?|kamera[ ._-]?arkası)$', re.I)
+EXTRAS_FILE_RE = re.compile(r'-(featurette|behindthescenes|deleted|interview|trailer|short|scene|other|extra)\.\w+$', re.I)
+EXTRA_BASE = 1000  # extras without their own S00Exx number are numbered from here, so TMDb's specials never rename them
+
+
+def is_extra(rel_path):
+    parts = rel_path.split(os.sep)
+    return any(EXTRAS_DIR_RE.match(p.strip()) for p in parts[1:-1]) or bool(EXTRAS_FILE_RE.search(parts[-1]))
+
+
+def extra_title(filename):
+    """A readable name for an extra from its file name: 'Season 1 - Honest Trailer - Screen Junkies.mkv' ->
+    'Honest Trailer - Screen Junkies'."""
+    t = re.sub(r'\.\w+$', '', filename)
+    t = EXTRAS_FILE_RE.sub('', filename) if EXTRAS_FILE_RE.search(filename) else t
+    t = re.sub(r'^(season|sezon)\s*\d+\s*[-–:.]\s*', '', t, flags=re.I)
+    return re.sub(r'[._]+', ' ', t).strip() or filename
+
+
 def parse_season_episode(rel_path):
+    """(season, episode) of a file under the series folder. Specials and extras are season 0: an explicit S00Exx keeps
+    its number, other extras get episode 0 and the scanner numbers them from EXTRA_BASE."""
     parts = rel_path.split(os.sep)
     filename = parts[-1]
+    if is_extra(rel_path):
+        # Only a full SxxEyy code counts here; extras' titles are full of stray numbers ("Sketch #2", "Season 1 - ...").
+        m = re.search(r'[Ss](\d+)\s*[Ee][Pp]?\s*(\d+)', filename)
+        return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
     season = episode = None
     for part in parts[:-1]:
         m = (re.search(r'(\d+)\s*\.?\s*[Ss]ezon', part, re.I) or re.search(r'[Ss]ezon\s*(\d+)', part, re.I) or
@@ -96,7 +123,7 @@ def parse_season_episode(rel_path):
                     m = re.match(r'^(\d{1,3})\.\w+$', filename)
                     if m:
                         episode = int(m.group(1))
-    return season or 1, episode or 1
+    return (season if season is not None else 1), episode or 1
 
 
 def search_candidates(title):

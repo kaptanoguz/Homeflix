@@ -39,7 +39,7 @@ const EN = {
   'varsayılan': 'default', 'Bu içerik için açıklama bulunamadı.': 'No description available.', 'Bölümler': 'Episodes',
   'Koleksiyonu aç': 'Open collection', 'Benzer İçerikler': 'More Like This', 'Seriye Başla': 'Start the Series',
   'Sıradakini İzle': 'Watch Next', 'Çıkış sırasına göre': 'In release order', 'Bölüm bulunamadı': 'No episodes found',
-  'Sezon {n}': 'Season {n}', '{n}. Bölüm': 'Episode {n}', 'İzlendi': 'Watched', 'Yayın': 'Airs',
+  'Sezon {n}': 'Season {n}', 'Özel ve Ekstralar': 'Specials and Extras', '{n}. Bölüm': 'Episode {n}', 'İzlendi': 'Watched', 'Yayın': 'Airs',
   '<b>{t}</b> listene eklendi': 'Added <b>{t}</b> to your list', '<b>{t}</b> listenden çıkarıldı': 'Removed <b>{t}</b> from your list',
   'Türlere göz atın': 'Browse genres', 'Kütüphanede {n} sonuç': '{n} result in your library|{n} results in your library',
   'Kütüphanede sonuç yok': 'No results in your library', '{n} sonuç': '{n} result|{n} results',

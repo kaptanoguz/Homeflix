@@ -10,7 +10,7 @@ from collections import defaultdict
 from . import state
 from .config import IMG_EXTS, POSTERS_DIR, VIDEO_EXTS
 from .db import library_dirs, session
-from .names import (VTS_RE, clean_display_title, clean_series_name, parse_season_episode, smart_title)
+from .names import (EXTRA_BASE, VTS_RE, clean_display_title, clean_series_name, parse_season_episode, smart_title)
 
 NON_POSTER_WORDS = ('backdrop', 'fanart', 'landscape', 'banner', 'thumb', 'logo', 'clearart', 'disc', 'background')
 scan_lock = threading.Lock()
@@ -123,6 +123,11 @@ def _scan(settings):
                 scanned.append(series_dir)
         ep_paths = set()
         for name, eps in shows.items():
+            # Extras without an S00Exx number: numbered in file-name order, so they keep their place across scans.
+            loose = sorted((e for e in eps if e[0] == 0 and e[1] == 0), key=lambda e: e[3].lower())
+            if loose:
+                eps = [e for e in eps if not (e[0] == 0 and e[1] == 0)]
+                eps += [(0, EXTRA_BASE + i, path, f) for i, (_, _, path, f) in enumerate(loose, 1)]
             row = c.execute("SELECT id FROM series WHERE title = ?", (name,)).fetchone()
             if not row:
                 added = min(_file_info(p)[0] for _, _, p, _ in eps)
@@ -135,7 +140,13 @@ def _scan(settings):
                 c.execute("INSERT INTO episodes (series_id, series_name, season, episode, title, path, filename) "
                           "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO UPDATE SET series_id = excluded.series_id, "
                           "series_name = excluded.series_name, season = excluded.season, episode = excluded.episode, "
-                          "title = excluded.title, filename = excluded.filename",
+                          "title = excluded.title, filename = excluded.filename, "
+                          # A file that moved to another season/episode (an extra that used to count as 1x1) drops the
+                          # TMDb details of its old number; the season fetch fills in the right ones.
+                          "ep_name = CASE WHEN episodes.season = excluded.season AND episodes.episode = excluded.episode "
+                          "THEN episodes.ep_name END, ep_overview = CASE WHEN episodes.season = excluded.season AND "
+                          "episodes.episode = excluded.episode THEN episodes.ep_overview END, still = CASE WHEN "
+                          "episodes.season = excluded.season AND episodes.episode = excluded.episode THEN episodes.still END",
                           (sid, name, season, episode, fname, path, fname))
         for r in c.execute("SELECT id, path FROM episodes").fetchall():
             if r['path'] not in ep_paths and (_under(r['path'], scanned) or not _under(r['path'], series_dirs)):
