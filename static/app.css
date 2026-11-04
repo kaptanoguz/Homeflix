@@ -238,6 +238,8 @@ main { min-height: 100vh; }
 .d-prov { display: flex; margin: -4px 0 18px; }
 .d-prov:empty { display: none; }
 .d-prov img { width: 40px; height: 40px; margin-right: 8px; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.45); }
+/* A series' own channel (Hulu, Apple TV+…): a wide, often dark logo, so it sits on a light tile. */
+.d-prov img.wide { width: auto; max-width: 120px; padding: 9px 12px; background: #f2f2f5; object-fit: contain; box-sizing: border-box; }
 .d-head h1 { font-size: clamp(28px, 4vw, 52px); margin: 0 0 18px; line-height: 1.02; font-weight: 800; letter-spacing: -.02em; max-width: 80%; text-shadow: 0 3px 20px rgba(0,0,0,.5); }
 .d-body { padding: 8px 44px 40px; }
 .d-grid { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); gap: 34px; }

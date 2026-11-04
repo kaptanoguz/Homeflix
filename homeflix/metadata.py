@@ -349,19 +349,38 @@ WATCH_REGION = 'TR'
 LOGO_SIZE = 'w92'
 
 
-def providers(d):
-    """Streaming services that carry the title in Turkey (TMDb's watch providers, data from JustWatch): name and logo.
-    Subscription services first, then free and with-ads ones; at most six."""
-    region = ((d.get('watch/providers') or {}).get('results') or {}).get(WATCH_REGION) or {}
-    out, seen = [], set()
+PROV_VERSION = 2  # bump when providers() changes, so cached credits are fetched again
+
+
+def _region_providers(d, region):
+    region = ((d.get('watch/providers') or {}).get('results') or {}).get(region) or {}
+    out = []
     for group in ('flatrate', 'free', 'ads'):
         for p in sorted(region.get(group) or [], key=lambda p: p.get('display_priority', 99)):
-            pid = p.get('provider_id')
-            if pid in seen or not p.get('logo_path'):
-                continue
-            seen.add(pid)
-            out.append({'n': p.get('provider_name') or '', 'l': p['logo_path']})
-    return out[:6]
+            if p.get('logo_path'):
+                out.append({'n': p.get('provider_name') or '', 'l': p['logo_path']})
+    return out
+
+
+def _same_service(a, b):
+    a, b = (''.join(ch for ch in x.lower() if ch.isalnum()) for x in (a, b))
+    return bool(a and b) and (a.startswith(b) or b.startswith(a))
+
+
+def providers(d):
+    """Logos of where the title is watched: for series their own channel or service first (TMDb networks, e.g. Hulu,
+    Apple TV+), then the streaming services that carry it in Turkey (TMDb watch providers, data from JustWatch).
+    When Turkey has none, the US list is used, so titles of services that aren't sold here still show one.
+    Network logos are wide ('w': 1) and are drawn on a light tile. At most six."""
+    nets = [{'n': n.get('name') or '', 'l': n['logo_path'], 'w': 1} for n in d.get('networks') or [] if n.get('logo_path')][:2]
+    region = _region_providers(d, WATCH_REGION) or _region_providers(d, 'US')
+    out = []
+    for p in region:
+        if not any(_same_service(p['n'], q['n']) for q in out):
+            out.append(p)
+    # A network that is also a streaming service in the list shows once, with the square app logo.
+    nets = [n for n in nets if not any(_same_service(n['n'], p['n']) for p in out)]
+    return (nets + out)[:6]
 
 
 def _parse_credits(kind, d):
@@ -382,7 +401,7 @@ def _parse_credits(kind, d):
     recs = [r['id'] for r in ((d.get('recommendations') or {}).get('results') or []) + ((d.get('similar') or {}).get('results') or [])
             if r.get('id')]
     return {'cast': cast, 'directors': list(dict.fromkeys(directors))[:3], 'writers': list(dict.fromkeys(writers))[:3],
-            'prov': providers(d),
+            'prov': providers(d), 'pv': PROV_VERSION,
             'tagline': d.get('tagline') or '', 'date': date,
             'countries': [c['iso_3166_1'] for c in d.get('production_countries') or [] if c.get('iso_3166_1')][:3],
             'rec': list(dict.fromkeys(recs))[:40]}
@@ -395,8 +414,8 @@ def credits(kind, tmdb_id):
         r = c.execute("SELECT data, fetched_at FROM credits WHERE kind = ? AND tmdb_id = ?", (kind, tmdb_id)).fetchone()
     cached = json.loads(r['data']) if r else None
     key = (kind, tmdb_id)
-    # Saved before platforms were added ('prov'): fetch once more to get them.
-    fresh = cached is not None and time.time() - r['fetched_at'] < CREDITS_MAX_AGE and 'prov' in cached
+    # Saved before the current platform list ('pv'): fetch once more to get it.
+    fresh = cached is not None and time.time() - r['fetched_at'] < CREDITS_MAX_AGE and cached.get('pv') == PROV_VERSION
     if fresh or time.time() - _credits_failed.get(key, 0) < CREDITS_RETRY_AFTER:
         return cached
     try:
@@ -437,7 +456,7 @@ def prefetch_credits():
                            "WHERE tmdb_id IS NOT NULL GROUP BY tmdb_id").fetchall()
         have = {(r['kind'], r['tmdb_id']): json.loads(r['data']) for r in c.execute(
             "SELECT kind, tmdb_id, data FROM credits WHERE fetched_at > ?", (time.time() - CREDITS_MAX_AGE,))}
-    have = {k: v for k, v in have.items() if 'prov' in v}  # older entries have no platforms yet: fetch them again
+    have = {k: v for k, v in have.items() if v.get('pv') == PROV_VERSION}  # older platform lists: fetch them again
     jobs = [t for t in titles if (t['kind'], t['tmdb_id']) not in have or _missing_photos(have[(t['kind'], t['tmdb_id'])])]
     jobs.sort(key=lambda t: ((t['r'] or 0) < 8, -(t['r'] or 0)))
     state.credits.update(done=0, total=len(jobs))
