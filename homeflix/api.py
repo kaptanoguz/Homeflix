@@ -1,4 +1,5 @@
 import gzip
+import json
 import os
 import re
 import secrets
@@ -13,7 +14,7 @@ from flask import Flask, Response, abort, g, jsonify, render_template, request, 
 
 from . import downloads, library, livetv, media, metadata, online, state, subtitles
 from .config import BASE_DIR, ONLINE_EMBED, POSTERS_DIR
-from .db import LOCAL_VIEWER, load_settings, save_settings, session
+from .db import LOCAL_VIEWER, library_dirs, load_settings, save_settings, session
 from .names import fold, sequel_key
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, 'templates'),
@@ -864,6 +865,15 @@ def api_settings():
             abort(403)
         d = request.get_json(force=True, silent=True) or {}
         values = {k: str(v).strip() for k, v in d.items() if k in ('movie_dir', 'series_dir', 'omdb_api_key') and str(v).strip()}
+        for kind in ('movie', 'series'):
+            if isinstance(d.get(f'{kind}_dirs'), list):
+                dirs = []
+                for p in d[f'{kind}_dirs']:
+                    p = os.path.normpath(str(p).strip()) if str(p).strip() else ''
+                    if p and p not in dirs:
+                        dirs.append(p)
+                values[f'{kind}_dirs'] = json.dumps(dirs, ensure_ascii=False)
+                values[f'{kind}_dir'] = dirs[0] if dirs else ''  # read by older versions
         if 'download_mbps' in d:
             values['download_mbps'] = str(downloads.set_limit(d['download_mbps']))
         settings.update(values)
@@ -876,7 +886,46 @@ def api_settings():
     from .config import PORT
     # Folder paths and the API key are only shown to (and editable from) this computer, not other devices on the LAN.
     private = {k: settings.get(k, '') if local else '' for k in ('movie_dir', 'series_dir', 'omdb_api_key')}
+    for kind in ('movie', 'series'):
+        private[f'{kind}_dirs'] = library_dirs(settings, kind) if local else []
     return jsonify({**private, 'local': local, 'stats': stats, 'download_mbps': downloads.limit_mbps(), 'urls': [f"http://{ip}:{PORT}" for ip in lan_ips()]})
+
+
+def _browse_roots():
+    """Where the folder picker starts: the drives on Windows; the disk, home and plugged-in drives elsewhere."""
+    if os.name == 'nt':
+        import string
+        return [(f'{d}:\\', f'{d}:\\') for d in string.ascii_uppercase if os.path.isdir(f'{d}:\\')]
+    roots = [('/', '/'), (os.path.expanduser('~'), os.path.expanduser('~'))]
+    user = os.path.basename(os.path.expanduser('~'))
+    for base in (f'/media/{user}', '/media', '/mnt', '/run/media/' + user, '/Volumes'):
+        try:
+            for name in sorted(os.listdir(base)):
+                path = os.path.join(base, name)
+                if os.path.isdir(path) and not name.startswith('.') and path not in (r[1] for r in roots) and path != f'/media/{user}':
+                    roots.append((name, path))
+        except OSError:
+            pass
+    return roots
+
+
+@app.route('/api/browse')
+def api_browse():
+    """Subfolders of a folder, for picking library folders in Settings. Only from this computer."""
+    if not is_local_request():
+        abort(403)
+    path = request.args.get('path', '').strip()
+    if not path:
+        return jsonify({'path': '', 'parent': None, 'dirs': [{'name': n, 'path': p} for n, p in _browse_roots()]})
+    path = os.path.normpath(os.path.expanduser(path))
+    try:
+        names = sorted((n for n in os.listdir(path) if not n.startswith(('.', '$')) and n != 'System Volume Information'
+                        and os.path.isdir(os.path.join(path, n))), key=str.lower)
+    except OSError:
+        return jsonify({'error': 'Bu klasör açılamadı'}), 400
+    parent = os.path.dirname(path)
+    return jsonify({'path': path, 'parent': parent if parent != path else '',
+                    'dirs': [{'name': n, 'path': os.path.join(path, n)} for n in names]})
 
 
 @app.route('/api/scan', methods=['POST'])

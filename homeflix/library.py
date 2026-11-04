@@ -9,7 +9,7 @@ from collections import defaultdict
 
 from . import state
 from .config import IMG_EXTS, POSTERS_DIR, VIDEO_EXTS
-from .db import session
+from .db import library_dirs, session
 from .names import (VTS_RE, clean_display_title, clean_series_name, parse_season_episode, smart_title)
 
 NON_POSTER_WORDS = ('backdrop', 'fanart', 'landscape', 'banner', 'thumb', 'logo', 'clearart', 'disc', 'background')
@@ -62,17 +62,29 @@ def _file_info(path):
         return time.time(), 0
 
 
+def _under(path, roots):
+    return any(path == r or path.startswith(r.rstrip(os.sep) + os.sep) for r in roots)
+
+
 def _scan(settings):
-    movie_dir, series_dir = settings['movie_dir'], settings['series_dir']
+    movie_dirs, series_dirs = library_dirs(settings, 'movie'), library_dirs(settings, 'series')
+    # A folder that is missing or empty (a drive that isn't plugged in) keeps its titles until it is back.
+    # Titles from a folder that was taken out of the list are removed.
     with session() as c:
-        found = set()
-        if os.path.isdir(movie_dir):
-            existing = {r['path']: r for r in c.execute("SELECT id, path, added_at FROM movies")}
+        found, scanned = set(), []
+        existing = {r['path']: r for r in c.execute("SELECT id, path, added_at FROM movies")}
+        for movie_dir in movie_dirs:
+            if not os.path.isdir(movie_dir):
+                continue
+            n = 0
             for root, _, files in os.walk(movie_dir):
                 for f in files:
                     if not is_movie_file(f):
                         continue
                     path = os.path.join(root, f)
+                    n += 1
+                    if path in found:
+                        continue
                     found.add(path)
                     mtime, size = _file_info(path)
                     row = existing.get(path)
@@ -84,44 +96,53 @@ def _scan(settings):
                     c.execute("INSERT INTO movies (title, year, path, poster, rating, plot, genre, candidates, added_at, size) "
                               "VALUES (?, ?, ?, '', '', '', '', ?, ?, ?)",
                               (title, year, path, json.dumps([title]), mtime, size))
-            if found:
-                for r in c.execute("SELECT id, path FROM movies").fetchall():
-                    if r['path'] not in found:
-                        c.execute("DELETE FROM movies WHERE id = ?", (r['id'],))
+            if n:
+                scanned.append(movie_dir)
+        for r in c.execute("SELECT id, path FROM movies").fetchall():
+            if r['path'] not in found and (_under(r['path'], scanned) or not _under(r['path'], movie_dirs)):
+                c.execute("DELETE FROM movies WHERE id = ?", (r['id'],))
 
-        shows = defaultdict(list)
-        if os.path.isdir(series_dir):
+        shows, seen, scanned = defaultdict(list), set(), []
+        for series_dir in series_dirs:
+            if not os.path.isdir(series_dir):
+                continue
+            n = 0
             for root, _, files in os.walk(series_dir):
                 for f in files:
                     if f.startswith('._') or not f.lower().endswith(VIDEO_EXTS):
                         continue
                     path = os.path.join(root, f)
+                    n += 1
+                    if path in seen:
+                        continue
+                    seen.add(path)
                     rel = os.path.relpath(path, series_dir)
                     season, episode = parse_season_episode(rel)
                     shows[clean_series_name(rel.split(os.sep)[0])].append((season, episode, path, f))
-        if shows:
-            ep_paths = set()
-            for name, eps in shows.items():
+            if n:
+                scanned.append(series_dir)
+        ep_paths = set()
+        for name, eps in shows.items():
+            row = c.execute("SELECT id FROM series WHERE title = ?", (name,)).fetchone()
+            if not row:
+                added = min(_file_info(p)[0] for _, _, p, _ in eps)
+                c.execute("INSERT INTO series (title, year, poster, rating, plot, genre, candidates, added_at) "
+                          "VALUES (?, '', '', '', '', '', ?, ?)", (name, json.dumps([name]), added))
                 row = c.execute("SELECT id FROM series WHERE title = ?", (name,)).fetchone()
-                if not row:
-                    added = min(_file_info(p)[0] for _, _, p, _ in eps)
-                    c.execute("INSERT INTO series (title, year, poster, rating, plot, genre, candidates, added_at) "
-                              "VALUES (?, '', '', '', '', '', ?, ?)", (name, json.dumps([name]), added))
-                    row = c.execute("SELECT id FROM series WHERE title = ?", (name,)).fetchone()
-                sid = row['id']
-                for season, episode, path, fname in eps:
-                    ep_paths.add(path)
-                    c.execute("INSERT INTO episodes (series_id, series_name, season, episode, title, path, filename) "
-                              "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO UPDATE SET series_id = excluded.series_id, "
-                              "series_name = excluded.series_name, season = excluded.season, episode = excluded.episode, "
-                              "title = excluded.title, filename = excluded.filename",
-                              (sid, name, season, episode, fname, path, fname))
-            for r in c.execute("SELECT id, title FROM series").fetchall():
-                if r['title'] not in shows:
-                    c.execute("DELETE FROM series WHERE id = ?", (r['id'],))
-            for r in c.execute("SELECT id, path FROM episodes").fetchall():
-                if r['path'] not in ep_paths:
-                    c.execute("DELETE FROM episodes WHERE id = ?", (r['id'],))
+            sid = row['id']
+            for season, episode, path, fname in eps:
+                ep_paths.add(path)
+                c.execute("INSERT INTO episodes (series_id, series_name, season, episode, title, path, filename) "
+                          "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO UPDATE SET series_id = excluded.series_id, "
+                          "series_name = excluded.series_name, season = excluded.season, episode = excluded.episode, "
+                          "title = excluded.title, filename = excluded.filename",
+                          (sid, name, season, episode, fname, path, fname))
+        for r in c.execute("SELECT id, path FROM episodes").fetchall():
+            if r['path'] not in ep_paths and (_under(r['path'], scanned) or not _under(r['path'], series_dirs)):
+                c.execute("DELETE FROM episodes WHERE id = ?", (r['id'],))
+        for r in c.execute("SELECT id, title FROM series").fetchall():
+            if r['title'] not in shows and not c.execute("SELECT 1 FROM episodes WHERE series_id = ?", (r['id'],)).fetchone():
+                c.execute("DELETE FROM series WHERE id = ?", (r['id'],))
 
 
 def fill_file_info():
@@ -274,20 +295,20 @@ def find_movie_nfo(folder, base, generic_ok):
 
 
 def series_folder(settings, title):
-    root = settings['series_dir']
-    try:
-        for d in os.listdir(root):
-            if os.path.isdir(os.path.join(root, d)) and clean_series_name(d).lower() == title.lower():
-                return os.path.join(root, d)
-    except OSError:
-        pass
+    for root in library_dirs(settings, 'series'):
+        try:
+            for d in os.listdir(root):
+                if os.path.isdir(os.path.join(root, d)) and clean_series_name(d).lower() == title.lower():
+                    return os.path.join(root, d)
+        except OSError:
+            pass
     return None
 
 
 def movie_folder_info(settings, path):
     folder, fname = os.path.split(path)
     base = os.path.splitext(fname)[0]
-    generic_ok = os.path.normpath(folder) != os.path.normpath(settings['movie_dir'])
+    generic_ok = os.path.normpath(folder) not in {os.path.normpath(d) for d in library_dirs(settings, 'movie')}
     return folder, base, generic_ok
 
 
