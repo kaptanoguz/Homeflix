@@ -34,3 +34,6 @@ windows_build_package.zip
 
 # API keys (see secrets.example.json)
 secrets.json
+
+# Written by the Release workflow
+VERSION

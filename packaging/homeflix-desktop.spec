@@ -13,7 +13,8 @@ VERSION = os.environ.get('HOMEFLIX_VERSION', '2.0.0').lstrip('v')
 a = Analysis(
     [os.path.join(ROOT, 'app.py')],
     pathex=[ROOT],
-    datas=[(os.path.join(ROOT, 'templates'), 'templates'), (os.path.join(ROOT, 'static'), 'static')],
+    datas=[(os.path.join(ROOT, 'templates'), 'templates'), (os.path.join(ROOT, 'static'), 'static')]
+    + ([(os.path.join(ROOT, 'VERSION'), '.')] if os.path.exists(os.path.join(ROOT, 'VERSION')) else []),
     hiddenimports=['waitress', 'webview'],
     excludes=['matplotlib', 'numpy', 'pandas', 'tkinter'],
     noarchive=False,

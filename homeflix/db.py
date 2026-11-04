@@ -45,11 +45,17 @@ CREATE INDEX IF NOT EXISTS idx_episodes_series ON episodes(series_id, season, ep
 EXTRA_COLUMNS = {
     "movies": {"meta_tries": "INTEGER DEFAULT 0", "original_title": "TEXT", "tmdb_id": "INTEGER",
                "imdb_id": "TEXT", "collection_id": "INTEGER", "runtime": "INTEGER", "backdrop": "TEXT",
-               "added_at": "REAL", "size": "INTEGER", "enriched": "INTEGER DEFAULT 0", "cert": "TEXT"},
+               "added_at": "REAL", "size": "INTEGER", "enriched": "INTEGER DEFAULT 0", "cert": "TEXT",
+               # English title, plot and tagline (TMDb en-US) for the web app's English mode; NULL = not fetched yet. Genres need
+               # no copy: the web app translates their Turkish names itself.
+               "title_en": "TEXT", "plot_en": "TEXT", "tagline_en": "TEXT"},
     "series": {"meta_tries": "INTEGER DEFAULT 0", "original_title": "TEXT", "tmdb_id": "INTEGER",
                "backdrop": "TEXT", "added_at": "REAL", "enriched": "INTEGER DEFAULT 0", "display_title": "TEXT",
-               "cert": "TEXT"},
-    "episodes": {"ep_name": "TEXT", "ep_overview": "TEXT", "still": "TEXT", "runtime": "INTEGER"},
+               "cert": "TEXT", "title_en": "TEXT", "plot_en": "TEXT", "tagline_en": "TEXT"},
+    "episodes": {"ep_name": "TEXT", "ep_overview": "TEXT", "still": "TEXT", "runtime": "INTEGER",
+                 "ep_name_en": "TEXT", "ep_overview_en": "TEXT"},
+    "collections": {"name_en": "TEXT", "overview_en": "TEXT"},
+    "season_fetch": {"en_at": "REAL"},
 }
 
 
