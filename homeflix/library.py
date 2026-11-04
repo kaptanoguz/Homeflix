@@ -62,44 +62,81 @@ def _file_info(path):
         return time.time(), 0
 
 
-def _scan(settings):
-    movie_dir, series_dir = settings['movie_dir'], settings['series_dir']
-    with session() as c:
-        found = set()
-        if os.path.isdir(movie_dir):
-            existing = {r['path']: r for r in c.execute("SELECT id, path, added_at FROM movies")}
-            for root, _, files in os.walk(movie_dir):
-                for f in files:
-                    if not is_movie_file(f):
-                        continue
-                    path = os.path.join(root, f)
-                    found.add(path)
-                    mtime, size = _file_info(path)
-                    row = existing.get(path)
-                    if row:
-                        if not row['added_at']:
-                            c.execute("UPDATE movies SET added_at = ?, size = ? WHERE id = ?", (mtime, size, row['id']))
-                        continue
-                    title, year = smart_title(path)
-                    c.execute("INSERT INTO movies (title, year, path, poster, rating, plot, genre, candidates, added_at, size) "
-                              "VALUES (?, ?, ?, '', '', '', '', ?, ?, ?)",
-                              (title, year, path, json.dumps([title]), mtime, size))
-            if found:
-                for r in c.execute("SELECT id, path FROM movies").fetchall():
-                    if r['path'] not in found:
-                        c.execute("DELETE FROM movies WHERE id = ?", (r['id'],))
+def library_dirs(settings, kind):
+    """The folders of one kind ('movie' or 'series'). Saved as a JSON list; an older single path still works."""
+    raw = (settings.get(f'{kind}_dir') or '').strip()
+    if raw.startswith('['):
+        try:
+            dirs = [str(d).strip() for d in json.loads(raw)]
+        except ValueError:
+            dirs = []
+    else:
+        dirs = [raw]
+    out = []
+    for d in dirs:
+        d = os.path.normpath(d) if d else ''
+        if d and d not in out:
+            out.append(d)
+    return out
 
-        shows = defaultdict(list)
-        if os.path.isdir(series_dir):
-            for root, _, files in os.walk(series_dir):
-                for f in files:
-                    if f.startswith('._') or not f.lower().endswith(VIDEO_EXTS):
-                        continue
-                    path = os.path.join(root, f)
-                    rel = os.path.relpath(path, series_dir)
-                    season, episode = parse_season_episode(rel)
-                    shows[clean_series_name(rel.split(os.sep)[0])].append((season, episode, path, f))
-        if shows:
+
+def _under(path, root):
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+
+def _walk_videos(root, accept):
+    """Video files under one folder, or None when the folder is missing or shows nothing at all, as an unplugged
+    drive's empty mount point would. Its titles are then kept instead of being dropped from the library."""
+    if not os.path.isdir(root):
+        return None
+    paths = [os.path.join(r, f) for r, _, files in os.walk(root) for f in files if accept(f)]
+    return paths or None
+
+
+def _keep(path, roots, seen_roots):
+    """A file no scan found is dropped when its folder was scanned, or when its folder is no longer in the list."""
+    root = next((r for r in roots if _under(path, r)), None)
+    return root is not None and root not in seen_roots
+
+
+def _scan(settings):
+    movie_roots, series_roots = library_dirs(settings, 'movie'), library_dirs(settings, 'series')
+    with session() as c:
+        found, seen = set(), set()
+        existing = {r['path']: r for r in c.execute("SELECT id, path, added_at FROM movies")}
+        for root in movie_roots:
+            paths = _walk_videos(root, is_movie_file)
+            if paths is None:
+                continue
+            seen.add(root)
+            for path in paths:
+                found.add(path)
+                mtime, size = _file_info(path)
+                row = existing.get(path)
+                if row:
+                    if not row['added_at']:
+                        c.execute("UPDATE movies SET added_at = ?, size = ? WHERE id = ?", (mtime, size, row['id']))
+                    continue
+                title, year = smart_title(path)
+                c.execute("INSERT INTO movies (title, year, path, poster, rating, plot, genre, candidates, added_at, size) "
+                          "VALUES (?, ?, ?, '', '', '', '', ?, ?, ?)",
+                          (title, year, path, json.dumps([title]), mtime, size))
+        if seen:
+            for r in c.execute("SELECT id, path FROM movies").fetchall():
+                if r['path'] not in found and not _keep(r['path'], movie_roots, seen):
+                    c.execute("DELETE FROM movies WHERE id = ?", (r['id'],))
+
+        shows, seen = defaultdict(list), set()
+        for root in series_roots:
+            paths = _walk_videos(root, lambda f: not f.startswith('._') and f.lower().endswith(VIDEO_EXTS))
+            if paths is None:
+                continue
+            seen.add(root)
+            for path in paths:
+                rel = os.path.relpath(path, root)
+                season, episode = parse_season_episode(rel)
+                shows[clean_series_name(rel.split(os.sep)[0])].append((season, episode, path, os.path.basename(path)))
+        if seen:
             ep_paths = set()
             for name, eps in shows.items():
                 row = c.execute("SELECT id FROM series WHERE title = ?", (name,)).fetchone()
@@ -116,12 +153,13 @@ def _scan(settings):
                               "series_name = excluded.series_name, season = excluded.season, episode = excluded.episode, "
                               "title = excluded.title, filename = excluded.filename",
                               (sid, name, season, episode, fname, path, fname))
-            for r in c.execute("SELECT id, title FROM series").fetchall():
-                if r['title'] not in shows:
-                    c.execute("DELETE FROM series WHERE id = ?", (r['id'],))
             for r in c.execute("SELECT id, path FROM episodes").fetchall():
-                if r['path'] not in ep_paths:
+                if r['path'] not in ep_paths and not _keep(r['path'], series_roots, seen):
                     c.execute("DELETE FROM episodes WHERE id = ?", (r['id'],))
+            # A series stays while any of its episodes does (for example on a drive that is unplugged right now).
+            for r in c.execute("SELECT id, title FROM series").fetchall():
+                if r['title'] not in shows and not c.execute("SELECT 1 FROM episodes WHERE series_id = ? LIMIT 1", (r['id'],)).fetchone():
+                    c.execute("DELETE FROM series WHERE id = ?", (r['id'],))
 
 
 def fill_file_info():
@@ -274,20 +312,20 @@ def find_movie_nfo(folder, base, generic_ok):
 
 
 def series_folder(settings, title):
-    root = settings['series_dir']
-    try:
-        for d in os.listdir(root):
-            if os.path.isdir(os.path.join(root, d)) and clean_series_name(d).lower() == title.lower():
-                return os.path.join(root, d)
-    except OSError:
-        pass
+    for root in library_dirs(settings, 'series'):
+        try:
+            for d in os.listdir(root):
+                if os.path.isdir(os.path.join(root, d)) and clean_series_name(d).lower() == title.lower():
+                    return os.path.join(root, d)
+        except OSError:
+            pass
     return None
 
 
 def movie_folder_info(settings, path):
     folder, fname = os.path.split(path)
     base = os.path.splitext(fname)[0]
-    generic_ok = os.path.normpath(folder) != os.path.normpath(settings['movie_dir'])
+    generic_ok = os.path.normpath(folder) not in library_dirs(settings, 'movie')
     return folder, base, generic_ok
 
 

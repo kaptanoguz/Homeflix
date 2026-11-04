@@ -663,6 +663,7 @@ async function openSettings() {
   const pick = withBd[Math.floor(Math.random() * withBd.length)];
   ST.bd = pick ? img('m', pick.bdId, 'backdrop', 1280) : '';
   if (!stCats().some(c => c[0] === ST.cat)) ST.cat = 'library';
+  ST.pick = ST.confirm = null;
   page.innerHTML = `
     <aside class="st-side">
       <div class="st-top"><h2>${T('Ayarlar')}</h2><button class="icon-btn st-close" data-action="back" aria-label="${T('Kapat')}">${icon('x')}</button></div>
@@ -676,6 +677,7 @@ async function openSettings() {
 function stShow(cat) {
   if (cat === ST.cat || !ST.s) return;
   ST.cat = cat;
+  ST.pick = ST.confirm = null;
   $$('.st-cat').forEach(b => { const on = b.dataset.stCat === cat; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
   renderStPanel();
 }
@@ -701,14 +703,47 @@ const stGroup = label => `<h4 class="st-gl">${label}</h4>`;
 const stHint = text => `<p class="st-hint">${text}</p>`;
 
 const SUB_SIZES = [['s', 'Küçük'], ['m', 'Orta'], ['l', 'Büyük']];
+
+// Library folders, several of each kind like Plex. Pressing a folder once asks, pressing it again removes it, so a
+// stray press of the remote never drops part of the library. "Add folder" opens a picker over this computer's folders.
+const stDirRows = (kind, dirs) => dirs.map(d => {
+  const asking = ST.confirm === kind + '\n' + d;
+  return stRow({ ic: 'folder', title: `<span class="st-mono">${esc(d)}</span>`, sub: asking ? T('Kaldırmak için tekrar basın') : '',
+    attrs: `data-st="dir-rm" data-kind="${kind}" data-path="${esc(d)}"${asking ? ' data-asking' : ''}`, end: icon('x', 'st-end') });
+}).join('') + stRow({ ic: 'plus', title: T(kind === 'movie' ? 'Film klasörü ekle' : 'Dizi klasörü ekle'), attrs: `data-st="dir-add" data-kind="${kind}"`, end: icon('right', 'st-end') });
+function stPicker() {
+  const p = ST.pick;
+  if (!p.dirs) return `<div class="st-wait"><div class="spin"></div></div>`;
+  const added = ST.s[p.kind + '_dirs'].includes(p.path);
+  return `${stGroup(T(p.kind === 'movie' ? 'Film klasörü seçin' : 'Dizi klasörü seçin'))}
+    <div class="st-tiles one">${stTile(T('Seçili klasör'), p.path ? `<span class="st-mono">${esc(p.path)}</span>` : T('Bir yer seçin'))}</div>
+    ${p.path ? stRow({ ic: 'check', title: T(added ? 'Bu klasör zaten listede' : 'Bu klasörü ekle'), sub: added ? '' : T('Listeye eklenir ve tarama başlar.'), attrs: 'data-st="pick-add"', on: !added }) : ''}
+    ${stRow({ ic: 'x', title: T('Vazgeç'), attrs: 'data-st="pick-cancel"' })}
+    ${stGroup(p.path ? T('Alt klasörler') : T('Yerler'))}
+    ${p.path ? stRow({ ic: 'left', title: T('Üst klasör'), sub: `<span class="st-mono">${esc(p.parent || T('Yerler'))}</span>`, attrs: `data-st="pick-go" data-path="${esc(p.parent || '')}"` }) : ''}
+    ${p.dirs.length ? p.dirs.map(d => stRow({ ic: 'folder', title: esc(d.name), sub: p.path ? '' : `<span class="st-mono">${esc(d.path)}</span>`, attrs: `data-st="pick-go" data-path="${esc(d.path)}"`, end: icon('right', 'st-end') })).join('')
+      : stHint(T('Bu klasörde alt klasör yok.'))}`;
+}
+async function stBrowse(path) {
+  try { Object.assign(ST.pick, await api.get('/api/browse?path=' + encodeURIComponent(path))); }
+  catch { toast(T('Bu klasör açılamadı')); }
+}
+async function stSaveDirs(kind, dirs, msg) {
+  try { ST.s = { ...ST.s, ...await api.post('/api/settings', { [kind + '_dirs']: dirs }) }; } catch { toast(T('Kaydedilemedi')); return false; }
+  await api.post('/api/scan').catch(() => {});
+  toast(msg);
+  pollStatus(true);
+  return true;
+}
 const ST_PANELS = {
-  library: s => `
+  library: s => ST.pick ? stPicker() : `
     <div class="st-tiles four">${stTile(T2('Film', 'Movies'), s.stats.movies)}${stTile(T2('Dizi', 'Series'), s.stats.series)}${stTile(T2('Bölüm', 'Episodes'), s.stats.episodes)}${stTile(T2('Koleksiyon', 'Collections'), S.cols.length)}</div>
-    ${s.local ? `${stGroup(T('Klasörler'))}
-      <label class="st-field"><small>${T('Film klasörü')}</small><input id="conf-movie" value="${esc(s.movie_dir)}" spellcheck="false"></label>
-      <label class="st-field"><small>${T('Dizi klasörü')}</small><input id="conf-series" value="${esc(s.series_dir)}" spellcheck="false"></label>
+    ${s.local ? `${stGroup(T('Film klasörleri'))}${stDirRows('movie', s.movie_dirs)}
+      ${stGroup(T('Dizi klasörleri'))}${stDirRows('series', s.series_dirs)}
+      ${stHint(T('Her klasör alt klasörleriyle birlikte taranır. Diziler için her dizinin kendi klasöründe olması yeterli.'))}
+      ${stGroup('OMDb')}
       <label class="st-field"><small>${T('OMDb API anahtarı')}</small><input id="conf-key" value="${esc(s.omdb_api_key)}" spellcheck="false"></label>
-      ${stRow({ ic: 'check', title: T('Kaydet ve Tara'), sub: T('Klasörleri kaydeder ve kütüphaneyi baştan tarar.'), attrs: 'data-action="save-settings"', end: icon('right', 'st-end') })}` : ''}
+      ${stRow({ ic: 'check', title: T('Kaydet'), sub: T('OMDb anahtarını kaydeder.'), attrs: 'data-action="save-settings"', end: icon('right', 'st-end') })}` : ''}
     ${stGroup(T('Tarama'))}
     ${stRow({ ic: 'refresh', title: T('Yeniden Tara'), sub: T('Diskteki yeni ve silinen dosyaları bulur.'), attrs: 'data-action="rescan"', end: icon('right', 'st-end') })}
     ${stRow({ ic: 'search', title: T('Eksik Bilgileri Tekrar Ara'), sub: T('Bilgisi veya afişi bulunamayan içerikleri yeniden arar.'), attrs: 'data-action="enrich"', end: icon('right', 'st-end') })}`,
@@ -762,7 +797,25 @@ const ST_PANELS = {
 };
 
 // Rows with data-st change a per-device setting (or the server's download limit) and redraw the panel in place.
-async function stAction(a) {
+async function stAction(a, el) {
+  const kind = el?.dataset.kind || ST.pick?.kind;
+  if (a !== 'dir-rm') ST.confirm = null;
+  if (a === 'dir-rm') {
+    const key = kind + '\n' + el.dataset.path;
+    if (ST.confirm !== key) { ST.confirm = key; return renderStPanel(`[data-st="dir-rm"][data-asking]`); }
+    ST.confirm = null;
+    await stSaveDirs(kind, ST.s[kind + '_dirs'].filter(d => d !== el.dataset.path), T('Klasör kaldırıldı, kütüphane güncelleniyor'));
+    return renderStPanel(`[data-st="dir-add"][data-kind="${kind}"]`);
+  }
+  if (a === 'dir-add') { ST.pick = { kind }; renderStPanel(); await stBrowse(''); return renderStPanel('[data-st="pick-go"]'); }
+  if (a === 'pick-go') { await stBrowse(el.dataset.path); return renderStPanel('[data-st="pick-add"], [data-st="pick-go"]'); }
+  if (a === 'pick-cancel') { ST.pick = null; return renderStPanel(`[data-st="dir-add"][data-kind="${kind}"]`); }
+  if (a === 'pick-add') {
+    const dirs = ST.s[kind + '_dirs'];
+    if (!dirs.includes(ST.pick.path) && !await stSaveDirs(kind, [...dirs, ST.pick.path], T('Klasör eklendi, tarama başladı'))) return;
+    ST.pick = null;
+    return renderStPanel(`[data-st="dir-add"][data-kind="${kind}"]`);
+  }
   if (a === 'sub-size') {
     const i = SUB_SIZES.findIndex(x => x[0] === store.get('subSize', 'm'));
     store.set('subSize', SUB_SIZES[(i + 1) % SUB_SIZES.length][0]);
@@ -808,6 +861,10 @@ window.addEventListener('keydown', e => {
   if (!$('#settings').classList.contains('open') || P.open) return;
   document.documentElement.classList.add('kb');
   const k = e.key, a = document.activeElement;
+  if (ST.pick && (k === 'Escape' || e.keyCode === 461 || k === 'GoBack')) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    return stAction('pick-cancel');
+  }
   const enter = k === 'Enter' || e.keyCode === 23;
   if (!/^Arrow/.test(k) && !enter) return;
   const typing = a && a.tagName === 'INPUT';
@@ -885,9 +942,9 @@ function randAction(el) {
 
 async function settingsAction(a) {
   if (a === 'save-settings') {
-    await api.post('/api/settings', { movie_dir: $('#conf-movie').value, series_dir: $('#conf-series').value, omdb_api_key: $('#conf-key').value });
-    await api.post('/api/scan');
-    toast(T('Ayarlar kaydedildi, tarama başladı'));
+    try { await api.post('/api/settings', { omdb_api_key: $('#conf-key').value }); } catch { return toast(T('Kaydedilemedi')); }
+    toast(T('Kaydedildi'));
+    return;
   } else if (a === 'rescan') { await api.post('/api/rescan'); toast(T('Diskteki dosyalar taranıyor…')); }
   else if (a === 'enrich') { await api.post('/api/enrich'); toast(T('Eksik bilgiler yeniden aranıyor')); }
   pollStatus(true);
@@ -2362,7 +2419,7 @@ document.addEventListener('click', async e => {
   const stc = t.closest('[data-st-cat]');
   if (stc) { stShow(stc.dataset.stCat); return; }
   const st = t.closest('[data-st]');
-  if (st) return stAction(st.dataset.st);
+  if (st) return stAction(st.dataset.st, st);
   const pl = t.closest('[data-play]');
   if (pl && pl.dataset.play) {
     const [kind, id] = pl.dataset.play.split(':');

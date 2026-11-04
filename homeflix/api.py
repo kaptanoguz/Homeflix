@@ -1,4 +1,5 @@
 import gzip
+import json
 import os
 import re
 import secrets
@@ -863,7 +864,12 @@ def api_settings():
         if not local:
             abort(403)
         d = request.get_json(force=True, silent=True) or {}
-        values = {k: str(v).strip() for k, v in d.items() if k in ('movie_dir', 'series_dir', 'omdb_api_key') and str(v).strip()}
+        values = {k: str(v).strip() for k, v in d.items() if k in ('movie_dir', 'series_dir', 'omdb_api_key') and isinstance(v, str) and v.strip()}
+        # Several folders of each kind, like Plex: kept as a JSON list in the same setting (an empty list is allowed).
+        for kind in ('movie', 'series'):
+            if isinstance(d.get(f'{kind}_dirs'), list):
+                dirs = library.library_dirs({f'{kind}_dir': json.dumps([str(x) for x in d[f'{kind}_dirs']])}, kind)
+                values[f'{kind}_dir'] = json.dumps(dirs, ensure_ascii=False)
         if 'download_mbps' in d:
             values['download_mbps'] = str(downloads.set_limit(d['download_mbps']))
         settings.update(values)
@@ -875,8 +881,50 @@ def api_settings():
                  'collections': c.execute("SELECT COUNT(*) FROM collections").fetchone()[0]}
     from .config import PORT
     # Folder paths and the API key are only shown to (and editable from) this computer, not other devices on the LAN.
-    private = {k: settings.get(k, '') if local else '' for k in ('movie_dir', 'series_dir', 'omdb_api_key')}
+    private = {'omdb_api_key': settings.get('omdb_api_key', '') if local else '',
+               'movie_dirs': library.library_dirs(settings, 'movie') if local else [],
+               'series_dirs': library.library_dirs(settings, 'series') if local else []}
     return jsonify({**private, 'local': local, 'stats': stats, 'download_mbps': downloads.limit_mbps(), 'urls': [f"http://{ip}:{PORT}" for ip in lan_ips()]})
+
+
+def _places():
+    """Starting points for the folder picker: home, external drives and, on Windows, every drive letter."""
+    home = os.path.expanduser('~')
+    out = [(os.path.basename(home) or home, home)]
+    if os.name == 'nt':
+        out += [(f'{l}:', f'{l}:\\') for l in 'CDEFGHIJKLMNOPQRSTUVWXYZ' if os.path.isdir(f'{l}:\\')]
+    else:
+        for base in ('/media', f"/media/{os.path.basename(home)}", '/run/media/' + os.path.basename(home), '/mnt', '/Volumes'):
+            try:
+                out += [(d, os.path.join(base, d)) for d in sorted(os.listdir(base))
+                        if os.path.isdir(os.path.join(base, d)) and os.path.join(base, d) != f"/media/{os.path.basename(home)}"]
+            except OSError:
+                pass
+        out.append(('/', '/'))
+    seen, places = set(), []
+    for name, path in out:
+        if path not in seen:
+            seen.add(path)
+            places.append({'name': name, 'path': path})
+    return places
+
+
+@app.route('/api/browse')
+def api_browse():
+    """Folders inside one folder, for picking library folders in Settings. Only from this computer."""
+    if not is_local_request():
+        abort(403)
+    path = (request.args.get('path') or '').strip()
+    if not path:
+        return jsonify({'path': '', 'parent': None, 'dirs': _places()})
+    path = os.path.abspath(os.path.expanduser(path))
+    try:
+        names = sorted((n for n in os.listdir(path) if not n.startswith('.') and os.path.isdir(os.path.join(path, n))), key=str.lower)
+    except OSError:
+        return jsonify({'error': 'unreadable', 'path': path}), 400
+    parent = os.path.dirname(path)
+    return jsonify({'path': path, 'parent': parent if parent != path else '',
+                    'dirs': [{'name': n, 'path': os.path.join(path, n)} for n in names[:500]]})
 
 
 @app.route('/api/scan', methods=['POST'])
