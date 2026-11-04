@@ -470,7 +470,7 @@ function detailHero(it, title, actions, metaHTML) {
 function fillProviders(list, key) {
   const box = $('#d-prov');
   if (!box || detailKey !== key || !list?.length) return;
-  box.innerHTML = list.map(p => `<img src="/img/tmdb/w92${esc(p.l)}" alt="${esc(p.n)}" title="${esc(p.n)}" onerror="this.remove()">`).join('');
+  box.innerHTML = list.map(p => `<img${p.w ? ' class="wide"' : ''} src="/img/tmdb/w92${esc(p.l)}" alt="${esc(p.n)}" title="${esc(p.n)}" onerror="this.remove()">`).join('');
 }
 
 // Downloads are for phones and computers; TVs (webOS, the Android TV app's WebView) have nowhere to save a file.
