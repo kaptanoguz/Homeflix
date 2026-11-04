@@ -349,31 +349,63 @@ WATCH_REGION = 'TR'
 LOGO_SIZE = 'w92'
 
 
-PROV_VERSION = 2  # bump when providers() changes, so cached credits are fetched again
+PROV_VERSION = 3  # bump when providers() changes, so cached credits are fetched again
+
+# Words after which a provider name only names a plan or a reseller ("Paramount+ with Showtime",
+# "AMC+ Amazon Channel", "Netflix Standard with Ads"): the service is the part before them.
+_PLAN_WORDS = {'with', 'premium', 'basic', 'standard', 'essential', 'ads', 'channel', 'channels', 'amazon', 'roku', 'apple'}
+# Networks that are streaming services. Other networks (BBC One, AMC, Syfy) only say where a series first aired.
+_STREAMING_NETWORKS = {'netflix', 'hulu', 'appletv', 'appletvplus', 'primevideo', 'disneyplus', 'hbo', 'max', 'paramountplus',
+                       'peacock', 'showtime', 'starz', 'blutv', 'exxen', 'gain', 'tabii', 'tod', 'mubi', 'crunchyroll'}
+
+
+def _service(name):
+    """'Amazon Prime Video' -> 'primevideo', 'HBO Max' -> 'max', 'Paramount+ Amazon Channel' -> 'paramountplus'."""
+    words = ''.join(ch if ch.isalnum() else ' ' for ch in (name or '').lower().replace('+', ' plus ')).split()
+    if len(words) > 1 and words[0] in ('amazon', 'hbo'):
+        words = words[1:]
+    out = []
+    for w in words:
+        if out and w in _PLAN_WORDS:
+            break
+        out.append(w)
+    return ''.join(out)
 
 
 def _region_providers(d, region):
     region = ((d.get('watch/providers') or {}).get('results') or {}).get(region) or {}
     out = []
     for group in ('flatrate', 'free', 'ads'):
-        for p in sorted(region.get(group) or [], key=lambda p: p.get('display_priority', 99)):
+        # A reseller's channel ("... Amazon Channel") only after the service's own app.
+        for p in sorted(region.get(group) or [], key=lambda p: ('channel' in (p.get('provider_name') or '').lower(),
+                                                                 p.get('display_priority', 99))):
             if p.get('logo_path'):
                 out.append({'n': p.get('provider_name') or '', 'l': p['logo_path']})
     return out
 
 
 def _same_service(a, b):
+    if _service(a) == _service(b):
+        return True
     a, b = (''.join(ch for ch in x.lower() if ch.isalnum()) for x in (a, b))
     return bool(a and b) and (a.startswith(b) or b.startswith(a))
 
 
 def providers(d):
-    """Logos of where the title is watched: for series their own channel or service first (TMDb networks, e.g. Hulu,
-    Apple TV+), then the streaming services that carry it in Turkey (TMDb watch providers, data from JustWatch).
+    """Logos of where the title is watched: for series their own streaming service first (TMDb networks, e.g. Hulu,
+    Apple TV+), then the services that carry it in Turkey (TMDb watch providers, data from JustWatch).
     When Turkey has none, the US list is used, so titles of services that aren't sold here still show one.
-    Network logos are wide ('w': 1) and are drawn on a light tile. At most six."""
-    nets = [{'n': n.get('name') or '', 'l': n['logo_path'], 'w': 1} for n in d.get('networks') or [] if n.get('logo_path')][:2]
+    Each service shows once, whatever plan or reseller it is listed under. Network logos are wide ('w': 1) and
+    are drawn on a light tile. At most six."""
+    nets = [{'n': n.get('name') or '', 'l': n['logo_path'], 'w': 1} for n in d.get('networks') or []
+            if n.get('logo_path') and _service(n.get('name')) in _STREAMING_NETWORKS]
     region = _region_providers(d, WATCH_REGION) or _region_providers(d, 'US')
+    # TMDb can list the same network twice (MobLand: Paramount+ twice).
+    uniq = []
+    for n in nets:
+        if not any(_same_service(n['n'], q['n']) for q in uniq):
+            uniq.append(n)
+    nets = uniq[:2]
     out = []
     for p in region:
         if not any(_same_service(p['n'], q['n']) for q in out):
