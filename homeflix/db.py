@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -121,6 +122,18 @@ def load_settings():
     conf.setdefault("series_dir", _first_existing(DEFAULT_SERIES_DIRS))
     conf.setdefault("omdb_api_key", OMDB_KEYS[0] if OMDB_KEYS else "")
     return conf
+
+
+def library_dirs(settings, kind):
+    """The movie or series folders ('movie' / 'series'). Older installs kept a single folder in movie_dir / series_dir."""
+    raw = settings.get(f"{kind}_dirs")
+    if raw is None:
+        return [settings[f"{kind}_dir"]] if settings.get(f"{kind}_dir") else []
+    try:
+        dirs = json.loads(raw) if isinstance(raw, str) else raw
+    except ValueError:
+        return []
+    return [d for d in dirs if isinstance(d, str) and d]
 
 
 def save_settings(values):

@@ -685,7 +685,7 @@ function renderStPanel(refocus) {
   const [k, ic, label, desc] = stCats().find(c => c[0] === ST.cat);
   box.innerHTML = `${ST.bd ? `<div class="st-art" style="background-image:linear-gradient(180deg, rgba(20,20,28,.35), #14141c 96%), url('${ST.bd}')"></div>` : ''}
     <header class="st-ph"><div class="st-ico">${icon(ic)}</div><h3>${T(label)}</h3><p>${T(desc)}</p></header>
-    <div class="st-body">${ST_PANELS[k](ST.s)}</div>`;
+    <div class="st-body">${ST.browse && k === 'library' ? stBrowse() : ST_PANELS[k](ST.s)}</div>`;
   box.scrollTop = 0;
   if (refocus) stFocus(box.querySelector(refocus));
 }
@@ -700,15 +700,63 @@ const stTile = (label, value, id = '') => `<div class="st-tile"><small>${label}<
 const stGroup = label => `<h4 class="st-gl">${label}</h4>`;
 const stHint = text => `<p class="st-hint">${text}</p>`;
 
+// Library folders, picked like in Plex: "Add folder" opens a folder browser in the panel; the folder chosen there is
+// saved to the list and scanned straight away. A row in the list takes its folder out of the library.
+const DIR_LABELS = { movie: ['Film klasörleri', 'Bu klasörü film klasörü olarak ekle'], series: ['Dizi klasörleri', 'Bu klasörü dizi klasörü olarak ekle'] };
+const stDirs = (s, kind) => `${stGroup(T(DIR_LABELS[kind][0]))}
+  ${s[`${kind}_dirs`].map((d, i) => stRow({ ic: 'folder', title: `<span class="st-mono">${esc(d)}</span>`, attrs: `data-dir-rm="${kind}:${i}" aria-label="${T('Kaldır')}: ${esc(d)}"`, end: icon('x', 'st-end') })).join('')}
+  ${stRow({ ic: 'plus', title: T('Klasör ekle'), sub: s[`${kind}_dirs`].length ? '' : T('Henüz klasör eklenmedi.'), attrs: `data-dir-add="${kind}"`, end: icon('right', 'st-end') })}`;
+function stBrowse() {
+  const b = ST.browse;
+  return `${stGroup(b.path ? `<span class="st-mono">${esc(b.path)}</span>` : T('Bir disk veya klasör seçin'))}
+    ${b.path ? stRow({ ic: 'check', title: T(DIR_LABELS[b.kind][1]), attrs: 'data-dir-pick' }) : ''}
+    ${b.path ? stRow({ ic: 'back', title: T('Üst klasör'), attrs: `data-dir-go="${esc(b.parent || '')}"` }) : ''}
+    ${b.dirs.map(d => stRow({ ic: 'folder', title: esc(d.name), attrs: `data-dir-go="${esc(d.path)}"`, end: icon('right', 'st-end') })).join('')}
+    ${b.dirs.length ? '' : stHint(T('Bu klasörde alt klasör yok.'))}
+    ${stRow({ ic: 'x', title: T('Vazgeç'), attrs: 'data-action="back"' })}`;
+}
+async function dirGo(path) {
+  let r;
+  try { r = await api.get(`/api/browse?path=${encodeURIComponent(path)}`); } catch { return toast(T('Bu klasör açılamadı')); }
+  if (!ST.browse) return;
+  Object.assign(ST.browse, r);
+  renderStPanel('#st-panel .st-row');
+}
+function dirAdd(kind) {
+  ST.browse = { kind, path: '', parent: '', dirs: [] };
+  pushOverlay('browse', () => { ST.browse = null; if (ST.s) renderStPanel(`[data-dir-add="${kind}"]`); });
+  return dirGo('');
+}
+async function saveDirs(kind, dirs) {
+  try {
+    ST.s = await api.post('/api/settings', { [`${kind}_dirs`]: dirs });
+    await api.post('/api/scan');
+  } catch { toast(T('Kaydedilemedi')); return false; }
+  pollStatus(true);
+  return true;
+}
+async function dirPick() {
+  const { kind, path } = ST.browse;
+  if (!await saveDirs(kind, [...ST.s[`${kind}_dirs`], path])) return;
+  toast(T('Klasör eklendi, tarama başladı'));
+  back();
+}
+async function dirRemove(v) {
+  const [kind, i] = v.split(':'), dirs = ST.s[`${kind}_dirs`];
+  if (!confirm(T('{d} kütüphaneden çıkarılsın mı? Diskteki dosyalar silinmez.', { d: dirs[+i] }))) return;
+  if (!await saveDirs(kind, dirs.filter((_, j) => j !== +i))) return;
+  toast(T('Klasör çıkarıldı'));
+  renderStPanel(`[data-dir-add="${kind}"]`);
+}
+
 const SUB_SIZES = [['s', 'Küçük'], ['m', 'Orta'], ['l', 'Büyük']];
 const ST_PANELS = {
   library: s => `
     <div class="st-tiles four">${stTile(T2('Film', 'Movies'), s.stats.movies)}${stTile(T2('Dizi', 'Series'), s.stats.series)}${stTile(T2('Bölüm', 'Episodes'), s.stats.episodes)}${stTile(T2('Koleksiyon', 'Collections'), S.cols.length)}</div>
-    ${s.local ? `${stGroup(T('Klasörler'))}
-      <label class="st-field"><small>${T('Film klasörü')}</small><input id="conf-movie" value="${esc(s.movie_dir)}" spellcheck="false"></label>
-      <label class="st-field"><small>${T('Dizi klasörü')}</small><input id="conf-series" value="${esc(s.series_dir)}" spellcheck="false"></label>
+    ${s.local ? `${stDirs(s, 'movie')}${stDirs(s, 'series')}
+      ${stGroup(T('OMDb'))}
       <label class="st-field"><small>${T('OMDb API anahtarı')}</small><input id="conf-key" value="${esc(s.omdb_api_key)}" spellcheck="false"></label>
-      ${stRow({ ic: 'check', title: T('Kaydet ve Tara'), sub: T('Klasörleri kaydeder ve kütüphaneyi baştan tarar.'), attrs: 'data-action="save-settings"', end: icon('right', 'st-end') })}` : ''}
+      ${stRow({ ic: 'check', title: T('Kaydet ve Tara'), sub: T('Anahtarı kaydeder ve kütüphaneyi baştan tarar.'), attrs: 'data-action="save-settings"', end: icon('right', 'st-end') })}` : ''}
     ${stGroup(T('Tarama'))}
     ${stRow({ ic: 'refresh', title: T('Yeniden Tara'), sub: T('Diskteki yeni ve silinen dosyaları bulur.'), attrs: 'data-action="rescan"', end: icon('right', 'st-end') })}
     ${stRow({ ic: 'search', title: T('Eksik Bilgileri Tekrar Ara'), sub: T('Bilgisi veya afişi bulunamayan içerikleri yeniden arar.'), attrs: 'data-action="enrich"', end: icon('right', 'st-end') })}`,
@@ -885,7 +933,7 @@ function randAction(el) {
 
 async function settingsAction(a) {
   if (a === 'save-settings') {
-    await api.post('/api/settings', { movie_dir: $('#conf-movie').value, series_dir: $('#conf-series').value, omdb_api_key: $('#conf-key').value });
+    await api.post('/api/settings', { omdb_api_key: $('#conf-key').value });
     await api.post('/api/scan');
     toast(T('Ayarlar kaydedildi, tarama başladı'));
   } else if (a === 'rescan') { await api.post('/api/rescan'); toast(T('Diskteki dosyalar taranıyor…')); }
@@ -2363,6 +2411,13 @@ document.addEventListener('click', async e => {
   if (stc) { stShow(stc.dataset.stCat); return; }
   const st = t.closest('[data-st]');
   if (st) return stAction(st.dataset.st);
+  const dg = t.closest('[data-dir-go]');
+  if (dg) return dirGo(dg.dataset.dirGo);
+  const dad = t.closest('[data-dir-add]');
+  if (dad) return dirAdd(dad.dataset.dirAdd);
+  const drm = t.closest('[data-dir-rm]');
+  if (drm) return dirRemove(drm.dataset.dirRm);
+  if (t.closest('[data-dir-pick]')) return dirPick();
   const pl = t.closest('[data-play]');
   if (pl && pl.dataset.play) {
     const [kind, id] = pl.dataset.play.split(':');
