@@ -22,6 +22,29 @@ GENRES = {
     10768: 'Savaş & Politik',
 }
 
+GENRES_EN = {
+    28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy', 80: 'Crime', 99: 'Documentary', 18: 'Drama',
+    10751: 'Family', 14: 'Fantasy', 36: 'History', 27: 'Horror', 10402: 'Music', 9648: 'Mystery', 10749: 'Romance',
+    878: 'Science Fiction', 10770: 'TV Movie', 53: 'Thriller', 10752: 'War', 37: 'Western',
+    10759: 'Action & Adventure', 10762: 'Kids', 10763: 'News', 10764: 'Reality', 10765: 'Sci-Fi & Fantasy',
+    10766: 'Soap', 10767: 'Talk', 10768: 'War & Politics',
+}
+
+# English names of the home rows, by their Turkish title.
+ROW_EN = {
+    'Trend Filmler': 'Trending Movies', 'Trend Diziler': 'Trending Series', 'Vizyondakiler': 'In Theaters',
+    'Popüler Filmler': 'Popular Movies', 'Popüler Diziler': 'Popular Series', 'Türk Filmleri': 'Turkish Movies',
+    'Türk Dizileri': 'Turkish Series', 'En Yüksek Puanlı Filmler': 'Top Rated Movies',
+    'En Yüksek Puanlı Diziler': 'Top Rated Series', 'Aksiyon': 'Action', 'Komedi': 'Comedy',
+    'Bilim-Kurgu': 'Science Fiction', 'Korku': 'Horror', 'Animasyon': 'Animation', 'Belgesel': 'Documentary',
+}
+LANGS = ('tr', 'en')
+
+
+def tm_lang(lang):
+    return metadata.EN_LANG if lang == 'en' else 'tr-TR'
+
+
 # (row title, TMDb path, extra params, 'm' / 's'); 'm' rows hold movies, 's' rows series.
 HOME_ROWS = [
     ('Trend Filmler', '/trending/movie/week', {}, 'm'),
@@ -88,9 +111,10 @@ def _rating(d):
     return f"{v:.1f}" if v and (d.get('vote_count') or 0) >= 20 else ''
 
 
-def item(d, kind):
+def item(d, kind, lang='tr'):
     """A TMDb list / search result in the shape the web app's cards use."""
-    names = [GENRES[g] for g in d.get('genre_ids') or [] if g in GENRES]
+    genres = GENRES_EN if lang == 'en' else GENRES
+    names = [genres[g] for g in d.get('genre_ids') or [] if g in genres]
     names = names or [g.get('name') for g in d.get('genres') or [] if g.get('name')]
     return {'kind': kind, 'tm': d['id'], 't': d.get('title') or d.get('name') or '',
             'ot': d.get('original_title') or d.get('original_name') or '', 'y': _year(d), 'r': _rating(d),
@@ -102,25 +126,26 @@ def wanted(r):
     return bool(r.get('poster_path')) and not r.get('adult') and not SKIP_GENRES & set(r.get('genre_ids') or [])
 
 
-def _results(path, kind, **params):
+def _results(path, kind, lang='tr', **params):
     if path.startswith('/discover/'):
         params = {'include_adult': 'false', **params}
         if kind == 's' and 'with_genres' not in params:
             params['without_genres'] = ','.join(map(str, sorted(SKIP_GENRES)))
-    d = metadata.tmdb(path, quick=True, **params) or {}
-    return [item(r, kind) for r in d.get('results') or [] if wanted(r)]
+    d = metadata.tmdb(path, quick=True, language=tm_lang(lang), **params) or {}
+    return [item(r, kind, lang) for r in d.get('results') or [] if wanted(r)]
 
 
-HOME_KEY = 'online_home'
+def home_key(lang):
+    return 'online_home_en' if lang == 'en' else 'online_home'
 # Card posters and hero / detail backdrops; the web app asks for exactly these sizes.
 POSTER_SIZE, BACKDROP_SIZE = 'w342', 'w1280'
 PREFETCH_PAUSE = 0.5
 
 
-def _load_home():
+def _load_home(lang='tr'):
     """The catalog saved by the last successful fetch, so it survives a restart without internet."""
     with session() as c:
-        r = c.execute("SELECT value FROM config WHERE key = ?", (HOME_KEY,)).fetchone()
+        r = c.execute("SELECT value FROM config WHERE key = ?", (home_key(lang),)).fetchone()
     try:
         saved = json.loads(r['value']) if r else None
         return (saved['at'], saved['rows']) if saved else None
@@ -128,16 +153,20 @@ def _load_home():
         return None
 
 
-def home():
+def _hk(lang):
+    return 'home_en' if lang == 'en' else 'home'
+
+
+def home(lang='tr'):
     with _cache_lock:
-        if 'home' not in _cache:
-            saved = _load_home()
+        if _hk(lang) not in _cache:
+            saved = _load_home(lang)
             if saved:
-                _cache['home'] = saved
+                _cache[_hk(lang)] = saved
 
     def fetch():
         with ThreadPoolExecutor(6) as pool:
-            jobs = [(title, pool.submit(_results, path, kind, **params)) for title, path, params, kind in HOME_ROWS]
+            jobs = [(title, pool.submit(_results, path, kind, lang, **params)) for title, path, params, kind in HOME_ROWS]
             rows, failed = [], 0
             for title, job in jobs:
                 try:
@@ -146,14 +175,14 @@ def home():
                     failed += 1
                     continue
                 if items:
-                    rows.append({'title': title, 'items': items})
+                    rows.append({'title': ROW_EN.get(title, title) if lang == 'en' else title, 'items': items})
         if failed == len(HOME_ROWS):
             raise metadata.NetworkError('TMDb')
         with session() as c:
             c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
-                      (HOME_KEY, json.dumps({'at': time.time(), 'rows': rows}, ensure_ascii=False)))
+                      (home_key(lang), json.dumps({'at': time.time(), 'rows': rows}, ensure_ascii=False)))
         return rows
-    return _cached('home', HOME_MAX_AGE, fetch)
+    return _cached(_hk(lang), HOME_MAX_AGE, fetch)
 
 
 def prefetch_images(rows):
@@ -176,7 +205,7 @@ OFFLINE_RETRY = 600
 
 def _home_age():
     with _cache_lock:
-        hit = _cache.get('home')
+        hit = _cache.get('home_en' if 'home_en' in _cache and 'home' not in _cache else 'home')
     return time.time() - hit[0] if hit else float('inf')
 
 
@@ -188,6 +217,8 @@ def warm_loop():
         try:
             if TMDB_KEY:
                 n = prefetch_images(home())
+                # The English catalog shares most images; only what the Turkish one lacks is downloaded.
+                n += prefetch_images(home('en'))
                 if n:
                     print(f"Online: {n} poster indirildi")
         except Unavailable:
@@ -199,31 +230,32 @@ def warm_loop():
         time.sleep(HOME_MAX_AGE - _home_age() + 30 if online_now else OFFLINE_RETRY)
 
 
-def search(q):
+def search(q, lang='tr'):
     q = ' '.join(q.split())[:80]
     if len(q) < 2:
         return []
 
     def fetch():
-        d = metadata.tmdb('/search/multi', quick=True, query=q, include_adult='false') or {}
+        d = metadata.tmdb('/search/multi', quick=True, query=q, include_adult='false', language=tm_lang(lang)) or {}
         out = []
         for r in d.get('results') or []:
             kind = {'movie': 'm', 'tv': 's'}.get(r.get('media_type'))
             if kind and wanted(r):
-                out.append(item(r, kind))
+                out.append(item(r, kind, lang))
         return out
-    return _cached(('search', q.lower()), SEARCH_MAX_AGE, fetch)
+    return _cached(('search', q.lower(), lang),  SEARCH_MAX_AGE, fetch)
 
 
-def title(kind, tmdb_id):
+def title(kind, tmdb_id, lang='tr'):
     """Details for the online detail page: TMDb info, seasons for series and recommendations."""
     path = f"/{'movie' if kind == 'm' else 'tv'}/{tmdb_id}"
 
     def fetch():
-        d = metadata.tmdb(path, quick=True, append_to_response='recommendations,watch/providers')
+        d = metadata.tmdb(path, quick=True, append_to_response='recommendations,watch/providers',
+                       language=tm_lang(lang))
         if not d:
             return None
-        out = item(d, kind)
+        out = item(d, kind, lang)
         out['tagline'] = d.get('tagline') or ''
         out['prov'] = metadata.providers(d)
         if kind == 'm':
@@ -233,22 +265,22 @@ def title(kind, tmdb_id):
             out['date'] = d.get('first_air_date') or ''
             out['seasons'] = [[s['season_number'], s.get('episode_count') or 0] for s in d.get('seasons') or []
                               if s.get('season_number') and s.get('episode_count')]
-        out['rec'] = [item(r, kind) for r in (d.get('recommendations') or {}).get('results') or []
+        out['rec'] = [item(r, kind, lang) for r in (d.get('recommendations') or {}).get('results') or []
                       if wanted(r)][:18]
         return out
-    data = _cached(('title', kind, tmdb_id), TITLE_MAX_AGE, fetch)
+    data = _cached(('title', kind, tmdb_id, lang), TITLE_MAX_AGE, fetch)
     if data:
-        remember(kind, tmdb_id, data)
+        remember(kind, tmdb_id, data, lang)
     return data
 
 
-def season(tmdb_id, n):
+def season(tmdb_id, n, lang='tr'):
     def fetch():
-        d = metadata.tmdb(f"/tv/{tmdb_id}/season/{n}", quick=True) or {}
+        d = metadata.tmdb(f"/tv/{tmdb_id}/season/{n}", quick=True, language=tm_lang(lang)) or {}
         return [{'n': e.get('episode_number'), 'name': e.get('name') or '', 'ov': e.get('overview') or '',
                  'still': e.get('still_path') or '', 'rt': e.get('runtime') or 0, 'air': e.get('air_date') or ''}
                 for e in d.get('episodes') or [] if e.get('episode_number')]
-    return _cached(('season', tmdb_id, n), TITLE_MAX_AGE, fetch)
+    return _cached(('season', tmdb_id, n, lang), TITLE_MAX_AGE, fetch)
 
 
 # ---------------------------------------------------------------- remembered titles
@@ -256,16 +288,38 @@ def season(tmdb_id, n):
 KEEP = ('kind', 'tm', 't', 'ot', 'y', 'r', 'g', 'p', 'op', 'ob', 'rt', 'seasons')
 
 
-def remember(kind, tmdb_id, data):
-    keep = {k: data[k] for k in KEEP if k in data}
+EN_KEYS = ('t', 'p', 'g')
+
+
+def remember(kind, tmdb_id, data, lang='tr'):
+    """Saves what Continue Watching and My List need. Turkish and English texts are kept side by side ('t' / 't_en')."""
     with session() as c:
+        old = known(c, kind, tmdb_id) or {}
+        if lang == 'en':
+            keep = dict(old)
+            for k in EN_KEYS:
+                if k in data:
+                    keep[k + '_en'] = data[k]
+            for k in KEEP:
+                if k not in EN_KEYS and k in data and k not in keep:
+                    keep[k] = data[k]
+        else:
+            keep = {k: data[k] for k in KEEP if k in data}
+            keep.update({k: v for k, v in old.items() if k.endswith('_en')})
         c.execute("INSERT OR REPLACE INTO online_titles (kind, tmdb_id, data, updated_at) VALUES (?, ?, ?, ?)",
                   (kind, tmdb_id, json.dumps(keep, ensure_ascii=False), time.time()))
 
 
-def known(c, kind, tmdb_id):
+def known(c, kind, tmdb_id, lang='tr'):
     r = c.execute("SELECT data FROM online_titles WHERE kind = ? AND tmdb_id = ?", (kind, tmdb_id)).fetchone()
-    return json.loads(r['data']) if r else None
+    if not r:
+        return None
+    info = json.loads(r['data'])
+    if lang == 'en':
+        for k in EN_KEYS:
+            if info.get(k + '_en'):
+                info[k] = info[k + '_en']
+    return info
 
 
 def next_episode(info, s, e):

@@ -371,7 +371,7 @@ def api_user():
         for key in mylist:
             k = online.parse_key(key)
             if k and key[:3] in ('om:', 'os:'):
-                info = online.known(c, k[0], k[1])
+                info = online.known(c, k[0], k[1], request_lang())
                 if info:
                     listed[key] = info
     return jsonify({'progress': prog, 'mylist': mylist, 'continue': continue_watching(), 'online': listed,
@@ -438,7 +438,7 @@ def _online_continue(c, r, seen_series):
     if not k or r['key'].startswith('os:'):
         return None
     kind, tm, s, e = k
-    info = online.known(c, kind, tm)
+    info = online.known(c, kind, tm, request_lang())
     if not info:
         return None
     base = {'kind': 'o' + ('m' if kind == 'm' else 'e'), 'tm': tm, 'pkey': r['key'], 'title': info.get('t', ''),
@@ -736,7 +736,7 @@ def subs_download():
 
 def _online(fn, *args):
     try:
-        data = fn(*args)
+        data = fn(*args, request_lang())
     except online.Unavailable as e:
         return jsonify({'error': str(e)}), 503
     if data is None:
@@ -746,7 +746,7 @@ def _online(fn, *args):
 
 @app.route('/api/online/home')
 def api_online_home():
-    return _online(lambda: {'rows': online.home(), 'embed': ONLINE_EMBED})
+    return _online(lambda lang: {'rows': online.home(lang), 'embed': ONLINE_EMBED})
 
 
 @app.route('/api/online/search')
@@ -759,7 +759,7 @@ def api_online_title(kind, tm):
     if kind not in ('m', 's'):
         abort(404)
     try:
-        data = online.title(kind, tm)
+        data = online.title(kind, tm, request_lang())
     except online.Unavailable as e:
         return jsonify({'error': str(e)}), 503
     if not data:
