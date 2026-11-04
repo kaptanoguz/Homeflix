@@ -634,61 +634,210 @@ function runSearch(q) {
 }
 
 /* ================================================================ settings */
+// A full-screen page: categories on the left, the chosen one on a large panel on the right. Every row is a button,
+// so the remote goes up and down a column, right into the panel and left back to the categories. Moving over a
+// category already shows it, like flipping through channels.
+const ST = { cat: 'library', s: null, bd: '' };
+function stCats() {
+  return [
+    ['library', 'stack', 'Kütüphane', 'Klasörler, tarama ve eksik film bilgileri.'],
+    ['subs', 'cc', 'Altyazı', 'Altyazının görünüşü ve kendiliğinden açılması.'],
+    ['random', 'shuffle', 'Rastgele film', 'Rastgele film düğmesinin hangi filmlerden seçeceği.'],
+    ST.s.local && ['downloads', 'download', 'İndirmeler', 'Kütüphane dosyaları indirilirken ağın ne kadarının kullanılacağı.'],
+    ['devices', 'wifi', 'Diğer cihazlar', 'Telefon, tablet ve TV’den Homeflix’e bağlanın.'],
+    ['lang', 'lang', 'Dil · Language', 'Menülerin ve düğmelerin dili.'],
+    ['keys', 'keyboard', 'Klavye kısayolları', 'Bilgisayarda klavyeyle hızlı kullanım.'],
+    ['about', 'info', 'Hakkında', 'Homeflix 2 ve bilgilerin geldiği yerler.'],
+  ].filter(Boolean);
+}
 async function openSettings() {
   const el = $('#settings');
-  el.classList.add('open');
-  pushOverlay('settings', () => el.classList.remove('open'));
-  const sheet = $('#settings-sheet');
-  sheet.innerHTML = `<div style="padding:60px;display:grid;place-items:center"><div class="spin"></div></div>`;
-  const s = await api.get('/api/settings');
-  sheet.innerHTML = `
-    <header class="st-head">
-      <h2>${T('Ayarlar')}</h2>
-      <div class="st-stats">
-        <div><b>${s.stats.movies}</b>${T2('Film', 'Movies')}</div><div><b>${s.stats.series}</b>${T2('Dizi', 'Series')}</div>
-        <div><b>${s.stats.episodes}</b>${T2('Bölüm', 'Episodes')}</div><div><b>${S.cols.length}</b>${T2('Koleksiyon', 'Collections')}</div>
-      </div>
-      <button class="close" data-action="back" aria-label="${T('Kapat')}">${icon('x')}</button>
-    </header>
-    <div class="st-grid">
-      <div class="st-col">
-        <section class="st-card"><h3>${T('Kütüphane')}</h3>
-          <div class="form">${s.local ? `
-            <div class="field"><label for="conf-movie">${T('Film klasörü')}</label><input id="conf-movie" value="${esc(s.movie_dir)}"></div>
-            <div class="field"><label for="conf-series">${T('Dizi klasörü')}</label><input id="conf-series" value="${esc(s.series_dir)}"></div>
-            <div class="field"><label for="conf-key">${T('OMDb API anahtarı')}</label><input id="conf-key" value="${esc(s.omdb_api_key)}"></div>` : ''}
-            <div class="actions">${s.local ? `
-              <button class="btn btn-accent btn-sm" data-action="save-settings">${icon('check')}${T('Kaydet ve Tara')}</button>` : ''}
-              <button class="btn btn-ghost btn-sm" data-action="rescan">${icon('refresh')}${T('Yeniden Tara')}</button>
-              <button class="btn btn-ghost btn-sm" data-action="enrich">${T('Eksik Bilgileri Tekrar Ara')}</button>
-            </div>
-          </div></section>
-        ${s.local ? downloadLimitSection(s.download_mbps) : ''}
-        <section class="st-card"><h3>${T('Diğer cihazlardan bağlan')}</h3>
-          <div class="urls">${(s.urls.length ? s.urls : [location.origin]).map(u => `<div class="url"><span>${esc(u)}</span><button class="icon-btn" data-copy="${esc(u)}" title="${T('Kopyala')}">${icon('copy')}</button></div>`).join('')}</div>
-          <p class="st-hint">${T('Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli.')}</p></section>
-      </div>
-      <div class="st-col">
-        ${langSection()}
-        ${randSection()}
-        <section class="st-card st-keys"><h3>${T('Klavye kısayolları')}</h3>
-          <div class="keys">
-            <div><kbd>/</kbd>${T('Ara')}</div><div><kbd>${T('Boşluk')}</kbd>${T('Oynat / Duraklat')}</div><div><kbd>← →</kbd>${T('10 sn geri / ileri')}</div>
-            <div><kbd>↑ ↓</kbd>${T('Ses')}</div><div><kbd>F</kbd>${T('Tam ekran')}</div><div><kbd>M</kbd>${T('Sessiz')}</div>
-            <div><kbd>C</kbd>${T('Ses ve altyazı')}</div><div><kbd>N</kbd>${T('Sonraki bölüm')}</div><div><kbd>Esc</kbd>${T('Geri')}</div>
-          </div></section>
-      </div>
-    </div>
-    <p class="st-foot">${T("Homeflix 2 · Film bilgileri TMDb, Emby ve OMDb'den alınır.")}</p>`;
+  if (!el.classList.contains('open')) {
+    el.classList.add('open');
+    pushOverlay('settings', () => { el.classList.remove('open'); ST.s = null; });
+  }
+  const page = $('#settings-sheet');
+  page.innerHTML = `<div class="st-wait"><div class="spin"></div></div>`;
+  try { ST.s = await api.get('/api/settings'); } catch { page.innerHTML = emptyState('Sunucuya ulaşılamıyor', 'Homeflix sunucusunun çalıştığından emin olun ve sayfayı yenileyin.'); return; }
+  const withBd = S.titles.filter(t => t.bd);
+  const pick = withBd[Math.floor(Math.random() * withBd.length)];
+  ST.bd = pick ? img('m', pick.bdId, 'backdrop', 1280) : '';
+  if (!stCats().some(c => c[0] === ST.cat)) ST.cat = 'library';
+  page.innerHTML = `
+    <aside class="st-side">
+      <div class="st-top"><h2>${T('Ayarlar')}</h2><button class="icon-btn st-close" data-action="back" aria-label="${T('Kapat')}">${icon('x')}</button></div>
+      <nav class="st-nav" role="tablist" aria-label="${T('Ayarlar')}">${stCats().map(([k, ic, label]) =>
+        `<button class="st-cat${k === ST.cat ? ' on' : ''}" data-st-cat="${k}" role="tab" aria-selected="${k === ST.cat}">${icon(ic)}<span>${T(label)}</span></button>`).join('')}</nav>
+    </aside>
+    <section class="st-panel" id="st-panel" role="tabpanel"></section>`;
+  renderStPanel();
+  stFocus($('.st-cat.on'));
 }
+function stShow(cat) {
+  if (cat === ST.cat || !ST.s) return;
+  ST.cat = cat;
+  $$('.st-cat').forEach(b => { const on = b.dataset.stCat === cat; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  renderStPanel();
+}
+function renderStPanel(refocus) {
+  const box = $('#st-panel');
+  if (!box) return;
+  const [k, ic, label, desc] = stCats().find(c => c[0] === ST.cat);
+  box.innerHTML = `${ST.bd ? `<div class="st-art" style="background-image:linear-gradient(180deg, rgba(20,20,28,.35), #14141c 96%), url('${ST.bd}')"></div>` : ''}
+    <header class="st-ph"><div class="st-ico">${icon(ic)}</div><h3>${T(label)}</h3><p>${T(desc)}</p></header>
+    <div class="st-body">${ST_PANELS[k](ST.s)}</div>`;
+  box.scrollTop = 0;
+  if (refocus) stFocus(box.querySelector(refocus));
+}
+
+// Building blocks of a panel: a row is a button (an icon, a title with an optional line under it, and a value,
+// switch or arrow at the end); a tile is a small label over a large value.
+const stRow = ({ ic = '', title, sub = '', value = '', end = '', attrs = '', on = false }) =>
+  `<button class="st-row${on ? ' on' : ''}" ${attrs}>${ic ? `<span class="st-ri">${icon(ic)}</span>` : ''}<span class="st-rt"><b>${title}</b>${sub ? `<small>${sub}</small>` : ''}</span>${value !== '' ? `<span class="st-rv">${value}</span>` : ''}${end}</button>`;
+const stSwitch = (attrs, on, title, sub, ic) => stRow({ ic, title, sub, on, attrs: `${attrs} role="switch" aria-checked="${on}"`, end: '<span class="st-sw" aria-hidden="true"></span>' });
+const stCycle = (attrs, title, value, ic, sub) => stRow({ ic, title, sub, value, attrs, end: icon('updown', 'st-end') });
+const stTile = (label, value, id = '') => `<div class="st-tile"><small>${label}</small><b${id ? ` id="${id}"` : ''}>${value}</b></div>`;
+const stGroup = label => `<h4 class="st-gl">${label}</h4>`;
+const stHint = text => `<p class="st-hint">${text}</p>`;
+
+const SUB_SIZES = [['s', 'Küçük'], ['m', 'Orta'], ['l', 'Büyük']];
+const ST_PANELS = {
+  library: s => `
+    <div class="st-tiles four">${stTile(T2('Film', 'Movies'), s.stats.movies)}${stTile(T2('Dizi', 'Series'), s.stats.series)}${stTile(T2('Bölüm', 'Episodes'), s.stats.episodes)}${stTile(T2('Koleksiyon', 'Collections'), S.cols.length)}</div>
+    ${s.local ? `${stGroup(T('Klasörler'))}
+      <label class="st-field"><small>${T('Film klasörü')}</small><input id="conf-movie" value="${esc(s.movie_dir)}" spellcheck="false"></label>
+      <label class="st-field"><small>${T('Dizi klasörü')}</small><input id="conf-series" value="${esc(s.series_dir)}" spellcheck="false"></label>
+      <label class="st-field"><small>${T('OMDb API anahtarı')}</small><input id="conf-key" value="${esc(s.omdb_api_key)}" spellcheck="false"></label>
+      ${stRow({ ic: 'check', title: T('Kaydet ve Tara'), sub: T('Klasörleri kaydeder ve kütüphaneyi baştan tarar.'), attrs: 'data-action="save-settings"', end: icon('right', 'st-end') })}` : ''}
+    ${stGroup(T('Tarama'))}
+    ${stRow({ ic: 'refresh', title: T('Yeniden Tara'), sub: T('Diskteki yeni ve silinen dosyaları bulur.'), attrs: 'data-action="rescan"', end: icon('right', 'st-end') })}
+    ${stRow({ ic: 'search', title: T('Eksik Bilgileri Tekrar Ara'), sub: T('Bilgisi veya afişi bulunamayan içerikleri yeniden arar.'), attrs: 'data-action="enrich"', end: icon('right', 'st-end') })}`,
+
+  subs: () => {
+    const size = store.get('subSize', 'm'), boxed = store.get('subBox', false), auto = !store.get('subsOff', false);
+    return `
+    <div class="st-subprev size-${size}${boxed ? ' boxed' : ''}"${ST.bd ? ` style="background-image:linear-gradient(0deg, rgba(0,0,0,.55), rgba(0,0,0,.1)), url('${ST.bd}')"` : ''}><span>${T('Altyazılar böyle görünecek.')}</span></div>
+    ${stGroup(T('Görünüm'))}
+    ${stCycle('data-st="sub-size"', T('Boyut'), T(SUB_SIZES.find(x => x[0] === size)[1]), 'type')}
+    ${stSwitch('data-st="sub-box"', boxed, T('Arka plan'), T('Yazının arkasını koyulaştırır, açık sahnelerde okumayı kolaylaştırır.'), 'cc')}
+    ${stGroup(T('Seçim'))}
+    ${stSwitch('data-st="sub-auto"', auto, T('Türkçe altyazıyı kendiliğinden aç'), T('Video Türkçe konuşmuyorsa önce dosyadaki, yoksa internetteki Türkçe altyazı açılır.'), 'globe')}
+    ${stHint(T('Oynatıcıda altyazıyı kapatırsanız bu ayar da kapanır. Altyazı ayarları yalnızca bu cihazda geçerlidir.'))}`;
+  },
+
+  random: () => {
+    const { genres, min } = randPrefs();
+    const chip = (attr, on, label) => `<button class="chip${on ? ' on' : ''}" ${attr} aria-pressed="${on}">${label}</button>`;
+    return `
+    <div class="st-tiles one">${stTile(T('Uyan film'), T('{n} film', { n: randPool().length }), 'rand-count')}</div>
+    ${stCycle('data-st="rand-min"', T('En düşük puan'), T(RAND_MIN.find(x => x[0] === min)?.[1] || 'Hepsi'), 'star')}
+    ${stGroup(T('Türler'))}
+    <div class="chips wrap st-chips" role="group" aria-label="${T('Türler')}">
+      ${chip('data-rand="genre" data-v=""', !genres.length, T('Tümü'))}${movieGenres().map(([g, n]) => chip(`data-rand="genre" data-v="${esc(g)}"`, genres.includes(g), `${esc(tx(g))} <span class="n">${n}</span>`)).join('')}
+    </div>
+    ${stHint(T('Birden fazla tür seçerseniz bunlardan herhangi birine uyan filmler gelir. Bu seçimler yalnızca bu cihazda geçerlidir.'))}`;
+  },
+
+  downloads: s => `
+    ${stCycle('data-st="dl-limit"', T('Hız sınırı'), T('{v} Mbit/sn', { v: s.download_mbps }), 'gauge', T('Bütün indirmeler birlikte'))}
+    <div class="st-tiles">${stTile(T('Aynı anda'), T('Cihaz başına 1 dosya'))}${stTile(T('Televizyonlar'), T('İndirme düğmesi gizli'))}</div>
+    ${stHint(T('Bütün indirmeler birlikte bu hızı geçmez. Her cihaz aynı anda yalnızca bir dosya indirebilir.'))}`,
+
+  devices: s => `
+    ${stGroup(T('Bu adreslerden biri'))}
+    ${(s.urls.length ? s.urls : [location.origin]).map(u => stRow({ ic: 'globe', title: `<span class="st-mono">${esc(u)}</span>`, attrs: `data-copy="${esc(u)}" aria-label="${T('Kopyala')}: ${esc(u)}"`, end: icon('copy', 'st-end') })).join('')}
+    ${stHint(T('Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli.'))}`,
+
+  lang: () => `
+    ${LANGS.map(([v, l]) => stRow({ ic: 'lang', title: l, on: LANG === v, attrs: `data-lang="${v}" role="radio" aria-checked="${LANG === v}"`, end: LANG === v ? icon('check', 'st-end') : '' })).join('')}
+    ${stHint(T('Menüler ve düğmeler bu dilde görünür. Film adları ve özetleri TMDb’den geldiği gibi kalır.'))}`,
+
+  keys: () => `<div class="st-tiles keys2">${[['/', 'Ara'], [T('Boşluk'), 'Oynat / Duraklat'], ['← →', '10 sn geri / ileri'], ['↑ ↓', 'Ses'],
+    ['F', 'Tam ekran'], ['M', 'Sessiz'], ['C', 'Ses ve altyazı'], ['N', 'Sonraki bölüm'], ['Esc', 'Geri']]
+    .map(([k, l]) => `<div class="st-tile st-key"><kbd>${k}</kbd><span>${l === 'Ses' ? T2('Ses', 'Volume') : T(l)}</span></div>`).join('')}</div>`,
+
+  about: () => `
+    <div class="st-tiles">${stTile(T('Uygulama'), 'Homeflix 2')}${stTile(T('Lisans'), 'GPL-3.0')}${stTile(T('Film bilgileri'), 'TMDb · Emby · OMDb')}${stTile(T('Bu sunucu'), `<span class="st-mono">${esc(location.host)}</span>`)}</div>
+    ${stHint(T("Homeflix 2 · Film bilgileri TMDb, Emby ve OMDb'den alınır."))}`,
+};
+
+// Rows with data-st change a per-device setting (or the server's download limit) and redraw the panel in place.
+async function stAction(a) {
+  if (a === 'sub-size') {
+    const i = SUB_SIZES.findIndex(x => x[0] === store.get('subSize', 'm'));
+    store.set('subSize', SUB_SIZES[(i + 1) % SUB_SIZES.length][0]);
+    applySubStyle();
+  } else if (a === 'sub-box') { store.set('subBox', !store.get('subBox', false)); applySubStyle(); }
+  else if (a === 'sub-auto') store.set('subsOff', !store.get('subsOff', false));
+  else if (a === 'rand-min') {
+    const i = RAND_MIN.findIndex(x => x[0] === randPrefs().min);
+    store.set('randMin', RAND_MIN[(i + 1) % RAND_MIN.length][0]);
+  } else if (a === 'dl-limit') {
+    const v = DL_LIMITS[(DL_LIMITS.indexOf(ST.s.download_mbps) + 1) % DL_LIMITS.length];
+    if (!await setDownloadLimit(v)) return;
+  }
+  renderStPanel(`[data-st="${a}"]`);
+}
+
+// Remote and arrow keys inside settings. Captured before the TV's own navigation, which would pick the nearest box on
+// the whole screen and could jump from the panel to a category in the middle of the list.
+function stFocus(el) {
+  if (!el) return;
+  $$('#settings .hf-focus').forEach(x => x.classList.remove('hf-focus'));
+  try { el.focus({ preventScroll: true }); } catch { el.focus(); }
+  try { el.scrollIntoView({ block: 'nearest' }); } catch {}
+}
+function stNearest(from, list, dir) {
+  const r = from.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const vertical = dir === 'ArrowUp' || dir === 'ArrowDown';
+  let best = null, bs = Infinity;
+  for (const el of list) {
+    if (el === from) continue;
+    const q = el.getBoundingClientRect();
+    if (!q.width) continue;
+    const dx = q.left + q.width / 2 - cx, dy = q.top + q.height / 2 - cy;
+    const prim = { ArrowDown: dy, ArrowUp: -dy, ArrowRight: dx, ArrowLeft: -dx }[dir];
+    const sec = vertical ? Math.abs(dx) : Math.abs(dy);
+    if (prim <= 4 || (!vertical && sec > Math.max(r.height, q.height) * 0.8)) continue;
+    const score = prim + sec * 2;
+    if (score < bs) { bs = score; best = el; }
+  }
+  return best;
+}
+window.addEventListener('keydown', e => {
+  if (!$('#settings').classList.contains('open') || P.open) return;
+  document.documentElement.classList.add('kb');
+  const k = e.key, a = document.activeElement;
+  const enter = k === 'Enter' || e.keyCode === 23;
+  if (!/^Arrow/.test(k) && !enter) return;
+  const typing = a && a.tagName === 'INPUT';
+  if (typing && (enter || k === 'ArrowLeft' || k === 'ArrowRight')) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const inSide = a && a.closest && a.closest('.st-nav');
+  const panelItems = () => $$('#st-panel button, #st-panel input');
+  if (enter) { if (a && a.closest && a.closest('#settings') && !e.repeat) a.click(); return; }
+  if (!inSide && !(a && a.closest && a.closest('#st-panel'))) return stFocus($('.st-cat.on'));
+  if (inSide) {
+    if (k === 'ArrowRight') return stFocus(panelItems()[0]);
+    if (k === 'ArrowLeft') return;
+    const cats = $$('.st-cat'), i = cats.indexOf(a);
+    const next = cats[i + (k === 'ArrowDown' ? 1 : -1)];
+    if (next) { stShow(next.dataset.stCat); stFocus(next); }
+    return;
+  }
+  const next = stNearest(a, panelItems(), k);
+  if (next) return stFocus(next);
+  if (k === 'ArrowLeft') return stFocus($('.st-cat.on'));
+  if (k === 'ArrowUp') $('#st-panel').scrollTop = 0;
+}, true);
+// The white pill highlight (tabs, settings) follows the remote and keyboard; with a mouse or finger, hover is enough.
+// It works on old TV browsers too, which do not know :focus-visible.
+window.addEventListener('keydown', () => document.documentElement.classList.add('kb'), true);
+window.addEventListener('pointerdown', () => document.documentElement.classList.remove('kb'), true);
 
 // Interface language, kept per device like the random movie filters. The page reloads to redraw everything in it.
 const LANGS = [['tr', 'Türkçe'], ['en', 'English']];
-function langSection() {
-  return `<section class="st-card" id="lang"><h3>Dil · Language</h3>
-    <div class="chips wrap" role="group" aria-label="Dil · Language">${LANGS.map(([v, l]) => `<button class="chip${LANG === v ? ' on' : ''}" data-lang="${v}" aria-pressed="${LANG === v}">${l}</button>`).join('')}</div>
-    <p class="st-hint">${T('Menüler ve düğmeler bu dilde görünür. Film adları ve özetleri TMDb’den geldiği gibi kalır.')}</p></section>`;
-}
 function setLang(v) {
   if (v === LANG) return;
   store.set('lang', v);
@@ -697,15 +846,11 @@ function setLang(v) {
 
 // Speed limit shared by all downloads together, so people watching are never slowed down. Set from this computer only.
 const DL_LIMITS = [10, 20, 40, 80, 200];
-function downloadLimitSection(cur) {
-  return `<section class="st-card" id="dl-limit"><h3>${T('İndirme hız sınırı')}</h3>
-    <div class="chips wrap" role="group" aria-label="${T('İndirme hız sınırı')}">${DL_LIMITS.map(v => `<button class="chip${v === cur ? ' on' : ''}" data-dl-limit="${v}" aria-pressed="${v === cur}">${T('{v} Mbit/sn', { v })}</button>`).join('')}</div>
-    <p class="st-hint">${T('Bütün indirmeler birlikte bu hızı geçmez. Her cihaz aynı anda yalnızca bir dosya indirebilir.')}</p></section>`;
-}
 async function setDownloadLimit(v) {
-  try { await api.post('/api/settings', { download_mbps: v }); } catch { return toast(T('Kaydedilemedi')); }
-  $$('[data-dl-limit]').forEach(b => { const on = +b.dataset.dlLimit === v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  try { await api.post('/api/settings', { download_mbps: v }); } catch { toast(T('Kaydedilemedi')); return false; }
+  ST.s.download_mbps = v;
   toast(T('İndirme sınırı {v} Mbit/sn', { v }));
+  return true;
 }
 
 // Random movie filters are kept per device, like volume and subtitle style. Several genres match any of them.
@@ -722,19 +867,6 @@ function randPrefs() {
 function randPool() {
   const { genres, min } = randPrefs();
   return S.titles.filter(t => (!genres.length || genresOf(t).some(g => genres.includes(g))) && (!min || parseFloat(t.r) >= min));
-}
-function randSection() {
-  const { genres, min } = randPrefs();
-  const chip = (attr, on, label) => `<button class="chip${on ? ' on' : ''}" ${attr} aria-pressed="${on}">${label}</button>`;
-  return `<section class="st-card" id="rand-prefs"><h3>${T('Rastgele film')}<span class="rand-count" id="rand-count">${T('{n} film', { n: randPool().length })}</span></h3>
-    <div class="form">
-      <div class="field"><span class="lbl">${T('Türler')}</span><div class="chips wrap" role="group" aria-label="${T('Türler')}">
-        ${chip('data-rand="genre" data-v=""', !genres.length, T('Tümü'))}${movieGenres().map(([g, n]) => chip(`data-rand="genre" data-v="${esc(g)}"`, genres.includes(g), `${esc(tx(g))} <span class="n">${n}</span>`)).join('')}
-      </div></div>
-      <div class="field"><span class="lbl">${T('En düşük puan')}</span><div class="chips wrap" role="group" aria-label="${T('En düşük puan')}">
-        ${RAND_MIN.map(([v, label]) => chip(`data-rand="min" data-v="${v}"`, v === min, T(label))).join('')}
-      </div></div>
-    </div></section>`;
 }
 function randAction(el) {
   const { genres } = randPrefs();
@@ -2227,8 +2359,10 @@ document.addEventListener('click', async e => {
   }
   const dl = t.closest('[data-dl]');
   if (dl) { e.stopPropagation(); return startDownload(dl.dataset.dl); }
-  const dlim = t.closest('[data-dl-limit]');
-  if (dlim) return setDownloadLimit(+dlim.dataset.dlLimit);
+  const stc = t.closest('[data-st-cat]');
+  if (stc) { stShow(stc.dataset.stCat); return; }
+  const st = t.closest('[data-st]');
+  if (st) return stAction(st.dataset.st);
   const pl = t.closest('[data-play]');
   if (pl && pl.dataset.play) {
     const [kind, id] = pl.dataset.play.split(':');

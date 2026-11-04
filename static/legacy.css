@@ -52,10 +52,6 @@
 .ep .done > * + * { margin-left: 4px; } .ep .done > .icon:first-child { margin-right: 4px; } .ep .done > .icon:first-child + * { margin-left: 0; }
 .version > * + * { margin-left: 12px; } .version > .icon:first-child { margin-right: 12px; } .version > .icon:first-child + * { margin-left: 0; }
 .search-bar > * + * { margin-left: 14px; } .search-bar > .icon:first-child { margin-right: 14px; } .search-bar > .icon:first-child + * { margin-left: 0; }
-.st-head > * + * { margin-left: 20px; } .st-head > .icon:first-child { margin-right: 20px; } .st-head > .icon:first-child + * { margin-left: 0; }
-.st-stats div > * + * { margin-left: 6px; } .st-stats div > .icon:first-child { margin-right: 6px; } .st-stats div > .icon:first-child + * { margin-left: 0; }
-.st-card h3 > * + * { margin-left: 12px; } .st-card h3 > .icon:first-child { margin-right: 12px; } .st-card h3 > .icon:first-child + * { margin-left: 0; }
-.url > * + * { margin-left: 10px; } .url > .icon:first-child { margin-right: 10px; } .url > .icon:first-child + * { margin-left: 0; }
 .toast > * + * { margin-left: 10px; } .toast > .icon:first-child { margin-right: 10px; } .toast > .icon:first-child + * { margin-left: 0; }
 .status > * + * { margin-left: 10px; } .status > .icon:first-child { margin-right: 10px; } .status > .icon:first-child + * { margin-left: 0; }
 .p-top > * + * { margin-left: 16px; } .p-top > .icon:first-child { margin-right: 16px; } .p-top > .icon:first-child + * { margin-left: 0; }
@@ -70,13 +66,10 @@
 .meta > * { margin-right: 14px; margin-bottom: 8px; }
 .actions > * { margin-right: 12px; margin-bottom: 12px; }
 .page-head > * { margin-right: 28px; margin-bottom: 16px; }
-.st-stats > * { margin-right: 8px; margin-bottom: 8px; }
 .pp-facts > * { margin-right: 26px; margin-bottom: 8px; }
 .p-panel .foot > * { margin-right: 18px; margin-bottom: 10px; }
 .chips.wrap > * { margin-left: 0; margin-right: 8px; margin-bottom: 8px; }
 .search-panel .chips > * { margin-left: 0; margin-right: 8px; margin-bottom: 8px; }
-.st-card .chips.wrap > * { margin-left: 0; margin-right: 6px; margin-bottom: 6px; }
-.st-card .actions > * { margin-right: 8px; margin-bottom: 8px; }
 .card .caption span > .score { margin-left: 8px; }  /* follows the year as a bare text node */
 .pp-inner > * + * { margin-top: 26px; }
 @media (max-width: 860px) { .pp-inner > * + * { margin-top: 18px; } .pp-main > * + * { margin-left: 14px; } }
