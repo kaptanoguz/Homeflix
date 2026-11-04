@@ -464,7 +464,21 @@ function detailHero(it, title, actions, metaHTML) {
   const posterSrc = it.online ? (it.op ? `${TMDB_IMG}w342${it.op}` : '') : it.kind !== 'c' && it.ph ? img(kind, it.id, 'poster', 500) : '';
   const fallback = posterSrc ? `<img class="blurposter" src="${posterSrc}" alt="">` : `<div class="ph" style="--h:${hue(title)}"></div>`;
   return `<div class="d-hero">${bdSrc ? `<img src="${bdSrc}" alt="" onload="this.classList.add('ok')" onerror="this.outerHTML=this.dataset.fb" data-fb='${esc(fallback)}'>` : fallback}
-    <div class="d-head"><h1>${esc(title)}</h1>${metaHTML ? `<div class="meta" style="margin-bottom:18px">${metaHTML}</div>` : ''}<div class="actions">${actions}</div></div></div>`;
+    <div class="d-head"><h1>${esc(title)}</h1>${metaHTML ? `<div class="meta" style="margin-bottom:18px">${metaHTML}</div>` : ''}<div class="actions">${actions}</div><div class="d-prov"></div></div></div>`;
+}
+
+// Logos of the streaming platforms a title is on (subscription or free, in Turkey), under the buttons.
+const PROVIDERS = new Map();
+async function showProviders(key, kind, tm) {
+  if (!tm) return;
+  let list = PROVIDERS.get(kind + tm);
+  if (!list) {
+    try { list = await api.get(`/api/providers/${kind}/${tm}`); } catch { return; }
+    PROVIDERS.set(kind + tm, list);
+  }
+  const box = $('#detail-sheet .d-prov');
+  if (detailKey !== key || !box) return;
+  box.innerHTML = list.map(p => `<img src="/img/logo/${esc(p.logo.slice(1))}" alt="${esc(p.name)}" title="${esc(p.name)}" onerror="this.remove()">`).join('');
 }
 
 // Downloads are for phones and computers; TVs (webOS, the Android TV app's WebView) have nowhere to save a file.
@@ -530,6 +544,7 @@ function renderDetail(it) {
       ${versions}
       ${similar.length ? `<div class="section"><div class="section-head"><h3>${T('Benzer İçerikler')}</h3></div><div class="grid">${similar.map(x => posterCard(x, { caption: true })).join('')}</div></div>` : ''}
     </div>`;
+  showProviders(it.key, it.kind, it.tm);
 }
 
 function renderCollectionDetail(c) {
@@ -1778,6 +1793,7 @@ function renderOnlineDetail(it, data) {
       ${it.kind === 'os' ? `<div class="section" id="episodes"><div class="section-head"><h3>${T('Bölümler')}</h3></div><div class="eps">${data ? '<div class="spin" style="margin:20px auto"></div>' : ''}</div></div>` : ''}
       ${rec.length ? `<div class="section"><div class="section-head"><h3>${T('Benzer İçerikler')}</h3></div><div class="grid">${rec.map(x => posterCard(x, { caption: true })).join('')}</div></div>` : ''}
     </div>`;
+  showProviders(detailKey, it.kind === 'om' ? 'm' : 's', tm);
 }
 
 // Where "Play" starts a series: after the last episode watched (or in it, if unfinished), else the first one.

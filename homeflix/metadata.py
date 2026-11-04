@@ -384,6 +384,33 @@ def credits(kind, tmdb_id):
         return cached
 
 
+# Streaming platforms a title is on in Turkey (TMDb's JustWatch data), shown as logos on the detail page.
+# Subscription, free and ad-supported only: rent/buy shops would put the same few stores on every title.
+PROVIDERS_REGION = 'TR'
+PROVIDERS_MAX_AGE = 24 * 3600
+_providers = {}
+
+
+def providers(kind, tmdb_id):
+    key = (kind, tmdb_id)
+    hit = _providers.get(key)
+    if hit and time.time() - hit[0] < PROVIDERS_MAX_AGE:
+        return hit[1]
+    try:
+        d = tmdb(f"/{kind}/{tmdb_id}/watch/providers", quick=True) or {}
+    except NetworkError:
+        return hit[1] if hit else []
+    region = d.get('results', {}).get(PROVIDERS_REGION, {})
+    seen, out = set(), []
+    for p in sorted((p for part in ('flatrate', 'free', 'ads') for p in region.get(part, [])),
+                    key=lambda p: p.get('display_priority', 99)):
+        if p.get('provider_id') not in seen and p.get('logo_path'):
+            seen.add(p['provider_id'])
+            out.append({'name': p.get('provider_name', ''), 'logo': p['logo_path']})
+    _providers[key] = (time.time(), out)
+    return out
+
+
 def fetch_credits(kind, tmdb_id, quick=False):
     credits_part = 'credits' if kind == 'movie' else 'aggregate_credits'
     d = tmdb(f"/{kind}/{tmdb_id}", quick=quick, append_to_response=f"{credits_part},recommendations,similar")

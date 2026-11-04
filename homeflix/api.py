@@ -827,6 +827,26 @@ def img_tmdb(size, name):
     return _send_image(media.remote_image('/' + name, size))
 
 
+@app.route('/api/providers/<kind>/<int:tm>')
+def api_providers(kind, tm):
+    if kind not in ('m', 's'):
+        abort(404)
+    resp = jsonify(metadata.providers('movie' if kind == 'm' else 'tv', tm))
+    resp.headers['Cache-Control'] = 'private, max-age=3600'
+    return resp
+
+
+@app.route('/img/logo/<name>')
+def img_logo(name):
+    """A streaming platform's logo (see api_providers)."""
+    if not re.fullmatch(r'[A-Za-z0-9_-]{4,64}\.(jpg|jpeg|png|svg)', name):
+        abort(404)
+    path = media.remote_image('/' + name, 'w154')
+    if not path:
+        abort(404)
+    return send_file(path, mimetype='image/png' if name.endswith('png') else 'image/svg+xml' if name.endswith('svg') else 'image/jpeg', conditional=True)
+
+
 @app.route('/img/person/<name>')
 def img_person(name):
     if not re.fullmatch(r'[A-Za-z0-9_-]{4,64}\.(jpg|jpeg|png)', name):
