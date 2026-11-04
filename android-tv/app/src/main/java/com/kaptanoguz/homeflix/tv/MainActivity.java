@@ -61,8 +61,9 @@ public class MainActivity extends Activity {
     private static final int DISCOVERY_PORT = 5099;
     private static final String QUESTION = "HOMEFLIX?";
 
+    // Bulunan her sunucu {adres, bilgisayar adı}; hiç yoksa liste boş.
     private interface Found {
-        void on(String url);
+        void on(List<String[]> servers);
     }
 
     private static final int RETRY_MS = 5000;
@@ -99,10 +100,8 @@ public class MainActivity extends Activity {
             load(currentUrl());
         } else {
             showStatus("HOMEFLIX\n\nAğda Homeflix sunucusu aranıyor…");
-            discover(url -> {
-                if (url != null) useUrl(url);
-                else showAddressDialog("Ağda Homeflix sunucusu bulunamadı. Homeflix'in çalıştığı bilgisayarın adresini girin. Bir kez sorulur, sonra hatırlanır.");
-            });
+            discover(servers -> pickServer(servers,
+                    "Ağda Homeflix sunucusu bulunamadı. Homeflix'in çalıştığı bilgisayarın adresini girin. Bir kez sorulur, sonra hatırlanır."));
         }
     }
 
@@ -210,8 +209,11 @@ public class MainActivity extends Activity {
         // Bilgisayarın adresi değişmiş olabilir (modem yeni IP vermiş): bir kez ağda aranır, bulunursa oraya geçilir.
         if (!searchedThisOutage) {
             searchedThisOutage = true;
-            discover(url -> {
-                if (url != null && offline && !url.equals(currentUrl())) useUrl(url);
+            // Ağda birden fazla Homeflix varsa kendiliğinden geçmez; OK > "Otomatik bul" ile seçilir.
+            discover(servers -> {
+                if (servers.size() != 1 || !offline) return;
+                String url = servers.get(0)[0];
+                if (!url.equals(currentUrl())) useUrl(url);
             });
         }
     }
@@ -227,19 +229,47 @@ public class MainActivity extends Activity {
         load(url);
     }
 
+    // Tek sunucu bulunduysa ona bağlanır, birden fazlaysa hangisi olduğunu sorar, hiç yoksa adres sorar.
+    private void pickServer(List<String[]> servers, String notFoundMessage) {
+        if (servers.size() == 1) {
+            useUrl(servers.get(0)[0]);
+            return;
+        }
+        if (servers.isEmpty()) {
+            showAddressDialog(notFoundMessage);
+            return;
+        }
+        if (dialog != null && dialog.isShowing()) return;
+        String[] labels = new String[servers.size()];
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = servers.get(i)[1] + "  (" + Uri.parse(servers.get(i)[0]).getAuthority() + ")";
+        }
+        handler.removeCallbacks(retry);
+        dialog = new AlertDialog.Builder(this)
+                .setTitle("Hangi Homeflix'e bağlanılsın?")
+                .setItems(labels, (d, i) -> useUrl(servers.get(i)[0]))
+                .setNegativeButton("Adresi elle gir", (d, w) -> {
+                    dialog = null;
+                    showAddressDialog(ADDRESS_HINT);
+                })
+                .setOnCancelListener(d -> load(currentUrl()))
+                .show();
+    }
+
     // Tek bir UDP yayını gönderir ("HOMEFLIX?"); ağdaki Homeflix sunucusu "HOMEFLIX <port> <ad>" diye cevap verir.
-    // Cevap gelmezse url null olur. Üç deneme yaklaşık üç saniye sürer.
+    // Ağdaki bütün sunucuların cevabı toplanır. Üç deneme yaklaşık üç saniye sürer.
     private void discover(Found cb) {
         if (searching) return;
         searching = true;
         new Thread(() -> {
-            String url = null;
+            List<String[]> found = new ArrayList<>();
+            List<String> seen = new ArrayList<>();
             try (DatagramSocket sock = new DatagramSocket()) {
                 sock.setBroadcast(true);
                 sock.setSoTimeout(400);
                 byte[] q = QUESTION.getBytes(StandardCharsets.UTF_8);
                 byte[] buf = new byte[256];
-                for (int i = 0; i < 3 && url == null; i++) {
+                for (int i = 0; i < 3; i++) {
                     for (InetAddress b : broadcastAddresses()) {
                         try {
                             sock.send(new DatagramPacket(q, q.length, b, DISCOVERY_PORT));
@@ -247,7 +277,7 @@ public class MainActivity extends Activity {
                         }
                     }
                     long end = System.currentTimeMillis() + 1000;
-                    while (url == null && System.currentTimeMillis() < end) {
+                    while (System.currentTimeMillis() < end) {
                         DatagramPacket p = new DatagramPacket(buf, buf.length);
                         try {
                             sock.receive(p);
@@ -257,7 +287,11 @@ public class MainActivity extends Activity {
                         String[] parts = new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8).trim().split(" ", 3);
                         if (parts.length >= 2 && "HOMEFLIX".equals(parts[0])) {
                             try {
-                                url = "http://" + p.getAddress().getHostAddress() + ":" + Integer.parseInt(parts[1]);
+                                String url = "http://" + p.getAddress().getHostAddress() + ":" + Integer.parseInt(parts[1]);
+                                if (!seen.contains(url)) {
+                                    seen.add(url);
+                                    found.add(new String[]{url, parts.length > 2 ? parts[2] : url});
+                                }
                             } catch (NumberFormatException ignored) {
                             }
                         }
@@ -265,10 +299,9 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) {
             }
-            final String result = url;
             handler.post(() -> {
                 searching = false;
-                cb.on(result);
+                cb.on(found);
             });
         }, "homeflix-discovery").start();
     }
@@ -327,13 +360,12 @@ public class MainActivity extends Activity {
                 })
                 .setNeutralButton("Otomatik bul", (d, w) -> {
                     showStatus("HOMEFLIX\n\nAğda Homeflix sunucusu aranıyor…");
-                    discover(url -> {
-                        if (url != null) {
-                            Toast.makeText(this, "Bulundu: " + Uri.parse(url).getAuthority(), Toast.LENGTH_SHORT).show();
-                            useUrl(url);
-                        } else {
-                            showAddressDialog("Ağda Homeflix sunucusu bulunamadı. Bilgisayar açık ve aynı ağda mı? Adresi elle de girebilirsiniz.");
+                    dialog = null;
+                    discover(servers -> {
+                        if (servers.size() == 1) {
+                            Toast.makeText(this, "Bulundu: " + servers.get(0)[1], Toast.LENGTH_SHORT).show();
                         }
+                        pickServer(servers, "Ağda Homeflix sunucusu bulunamadı. Bilgisayar açık ve aynı ağda mı? Adresi elle de girebilirsiniz.");
                     });
                 })
                 .setNegativeButton("İptal", (d, w) -> load(currentUrl()))
