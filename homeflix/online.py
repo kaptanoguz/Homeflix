@@ -220,11 +220,12 @@ def title(kind, tmdb_id):
     path = f"/{'movie' if kind == 'm' else 'tv'}/{tmdb_id}"
 
     def fetch():
-        d = metadata.tmdb(path, quick=True, append_to_response='recommendations')
+        d = metadata.tmdb(path, quick=True, append_to_response='recommendations,watch/providers')
         if not d:
             return None
         out = item(d, kind)
         out['tagline'] = d.get('tagline') or ''
+        out['prov'] = metadata.providers(d)
         if kind == 'm':
             out['rt'] = d.get('runtime') or 0
             out['date'] = d.get('release_date') or ''

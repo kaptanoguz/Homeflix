@@ -820,7 +820,7 @@ def img_still(eid):
 @app.route('/img/tmdb/<size>/<name>')
 def img_tmdb(size, name):
     """Online tab images, saved on the server (see online.prefetch_images) so devices without internet see them."""
-    if size not in (online.POSTER_SIZE, online.BACKDROP_SIZE, 'w300') or \
+    if size not in (online.POSTER_SIZE, online.BACKDROP_SIZE, 'w300', metadata.LOGO_SIZE) or \
             not re.fullmatch(r'[A-Za-z0-9_-]{4,64}\.(jpg|jpeg|png)', name):
         abort(404)
     return _send_image(media.remote_image('/' + name, size))

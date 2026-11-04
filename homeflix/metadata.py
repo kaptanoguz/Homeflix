@@ -345,6 +345,25 @@ CREDITS_RETRY_AFTER = 60
 _credits_failed = {}
 
 
+WATCH_REGION = 'TR'
+LOGO_SIZE = 'w92'
+
+
+def providers(d):
+    """Streaming services that carry the title in Turkey (TMDb's watch providers, data from JustWatch): name and logo.
+    Subscription services first, then free and with-ads ones; at most six."""
+    region = ((d.get('watch/providers') or {}).get('results') or {}).get(WATCH_REGION) or {}
+    out, seen = [], set()
+    for group in ('flatrate', 'free', 'ads'):
+        for p in sorted(region.get(group) or [], key=lambda p: p.get('display_priority', 99)):
+            pid = p.get('provider_id')
+            if pid in seen or not p.get('logo_path'):
+                continue
+            seen.add(pid)
+            out.append({'n': p.get('provider_name') or '', 'l': p['logo_path']})
+    return out[:6]
+
+
 def _parse_credits(kind, d):
     if kind == 'movie':
         crew = (d.get('credits') or {}).get('crew') or []
@@ -363,6 +382,7 @@ def _parse_credits(kind, d):
     recs = [r['id'] for r in ((d.get('recommendations') or {}).get('results') or []) + ((d.get('similar') or {}).get('results') or [])
             if r.get('id')]
     return {'cast': cast, 'directors': list(dict.fromkeys(directors))[:3], 'writers': list(dict.fromkeys(writers))[:3],
+            'prov': providers(d),
             'tagline': d.get('tagline') or '', 'date': date,
             'countries': [c['iso_3166_1'] for c in d.get('production_countries') or [] if c.get('iso_3166_1')][:3],
             'rec': list(dict.fromkeys(recs))[:40]}
@@ -375,7 +395,9 @@ def credits(kind, tmdb_id):
         r = c.execute("SELECT data, fetched_at FROM credits WHERE kind = ? AND tmdb_id = ?", (kind, tmdb_id)).fetchone()
     cached = json.loads(r['data']) if r else None
     key = (kind, tmdb_id)
-    if (r and time.time() - r['fetched_at'] < CREDITS_MAX_AGE) or time.time() - _credits_failed.get(key, 0) < CREDITS_RETRY_AFTER:
+    # Saved before platforms were added ('prov'): fetch once more to get them.
+    fresh = cached is not None and time.time() - r['fetched_at'] < CREDITS_MAX_AGE and 'prov' in cached
+    if fresh or time.time() - _credits_failed.get(key, 0) < CREDITS_RETRY_AFTER:
         return cached
     try:
         return fetch_credits(kind, tmdb_id, quick=True)
@@ -386,7 +408,7 @@ def credits(kind, tmdb_id):
 
 def fetch_credits(kind, tmdb_id, quick=False):
     credits_part = 'credits' if kind == 'movie' else 'aggregate_credits'
-    d = tmdb(f"/{kind}/{tmdb_id}", quick=quick, append_to_response=f"{credits_part},recommendations,similar")
+    d = tmdb(f"/{kind}/{tmdb_id}", quick=quick, append_to_response=f"{credits_part},recommendations,similar,watch/providers")
     data = _parse_credits(kind, d) if d else {}
     with session() as c:
         c.execute("INSERT OR REPLACE INTO credits (kind, tmdb_id, data, fetched_at) VALUES (?, ?, ?, ?)",
@@ -399,8 +421,10 @@ PREFETCH_RETRY_AFTER = 1800
 
 
 def _missing_photos(data):
-    return [p['p'] for p in (data or {}).get('cast') or []
-            if p.get('p') and not os.path.exists(media.image_path(p['p'], PHOTO_SIZE))]
+    """Actor photos and platform logos not saved on the server yet, as (path, size)."""
+    want = [(p['p'], PHOTO_SIZE) for p in (data or {}).get('cast') or [] if p.get('p')]
+    want += [(p['l'], LOGO_SIZE) for p in (data or {}).get('prov') or [] if p.get('l')]
+    return [(path, size) for path, size in want if not os.path.exists(media.image_path(path, size))]
 
 
 def prefetch_credits():
@@ -413,6 +437,7 @@ def prefetch_credits():
                            "WHERE tmdb_id IS NOT NULL GROUP BY tmdb_id").fetchall()
         have = {(r['kind'], r['tmdb_id']): json.loads(r['data']) for r in c.execute(
             "SELECT kind, tmdb_id, data FROM credits WHERE fetched_at > ?", (time.time() - CREDITS_MAX_AGE,))}
+    have = {k: v for k, v in have.items() if 'prov' in v}  # older entries have no platforms yet: fetch them again
     jobs = [t for t in titles if (t['kind'], t['tmdb_id']) not in have or _missing_photos(have[(t['kind'], t['tmdb_id'])])]
     jobs.sort(key=lambda t: ((t['r'] or 0) < 8, -(t['r'] or 0)))
     state.credits.update(done=0, total=len(jobs))
@@ -430,8 +455,8 @@ def prefetch_credits():
                 if api_failures >= 5:
                     return False
                 continue
-        for path in _missing_photos(data):
-            if media.remote_image(path, PHOTO_SIZE):
+        for path, size in _missing_photos(data):
+            if media.remote_image(path, size):
                 photo_failures = 0
             else:
                 photo_failures += 1
