@@ -560,7 +560,9 @@ async function loadEpisodes(s, season, tries = 0) {
   if (detailKey !== s.key) return;
   const box = $('#episodes');
   if (!box || !data.seasons.length) { if (box) box.innerHTML = emptyState('Bölüm bulunamadı', ''); return; }
-  const all = data.seasons.flatMap(x => x.eps.map(e => ({ ...e, season: x.n })));
+  // Play / Continue follows the episodes; season 0 (specials and extras) only when there is nothing else.
+  const regular = data.seasons.filter(x => x.n !== 0);
+  const all = (regular.length ? regular : data.seasons).flatMap(x => x.eps.map(e => ({ ...e, season: x.n })));
   const last = all.filter(e => e.at).sort((a, b) => b.at - a.at)[0];
   let target = all[0];
   if (last) {
@@ -574,13 +576,14 @@ async function loadEpisodes(s, season, tries = 0) {
     playBtn.dataset.play = 'e:' + target.id;
     playBtn.innerHTML = `${icon('play', 'fill')}${T(resume ? 'Devam Et' : last ? 'Oynat' : 'İzlemeye Başla')} · ${epCode(target.season, target.n)}`;
   }
-  const seasonSel = data.seasons.length > 1 ? `<label class="select"><select id="season-sel">${data.seasons.map(x => `<option value="${x.n}"${x.n === cur ? ' selected' : ''}>${T('Sezon {n}', { n: x.n })}</option>`).join('')}</select></label>` : `<span style="color:var(--dim)">${T('Sezon {n}', { n: cur })}</span>`;
+  const sName = n => n === 0 ? T('Özel ve Ekstralar') : T('Sezon {n}', { n });
+  const seasonSel = data.seasons.length > 1 ? `<label class="select"><select id="season-sel">${data.seasons.map(x => `<option value="${x.n}"${x.n === cur ? ' selected' : ''}>${sName(x.n)}</option>`).join('')}</select></label>` : `<span style="color:var(--dim)">${sName(cur)}</span>`;
   const eps = data.seasons.find(x => x.n === cur)?.eps || [];
   box.innerHTML = `<div class="section-head"><h3>${T('Bölümler')}</h3>${seasonSel}</div><div class="eps">${eps.map(e => {
     const pct = e.dur && !e.fin ? clamp(e.pos / e.dur * 100, 2, 100) : e.fin ? 100 : 0;
     const thumb = e.still ? `/img/still/${e.id}` : s.bd ? img('s', s.id, 'backdrop', 400) : s.ph ? img('s', s.id, 'poster', 342) : '';
     return `<div class="ep${target.id === e.id ? ' now' : ''}${CAN_DOWNLOAD ? ' has-dl' : ''}" tabindex="0" role="button" data-play="e:${e.id}">
-      <div class="num">${e.n}</div>
+      <div class="num">${e.x ? icon('star') : e.n}</div>
       <div class="thumb">${thumb ? `<img src="${thumb}" alt="" loading="lazy" onload="this.classList.add('ok')">` : ''}<div class="play-glyph"><span>${icon('play', 'fill')}</span></div>
         ${pct ? `<div class="pbar progress-line"><i style="width:${pct}%"></i></div>` : ''}</div>
       <div><h4><span>${esc(e.name || T('{n}. Bölüm', { n: e.n }))}</span><small>${e.fin ? `<span class="done">${icon('check')}${T('İzlendi')}</span>` : e.rt ? T('{m} dk', { m: e.rt }) : ''}</small></h4>

@@ -15,7 +15,7 @@ from flask import Flask, Response, abort, g, jsonify, render_template, request, 
 from . import downloads, library, livetv, media, metadata, online, state, subtitles
 from .config import BASE_DIR, ONLINE_EMBED, POSTERS_DIR
 from .db import LOCAL_VIEWER, library_dirs, load_settings, save_settings, session
-from .names import fold, sequel_key
+from .names import EXTRA_BASE, extra_title, fold, sequel_key
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, 'templates'),
             static_folder=os.path.join(BASE_DIR, 'static'))
@@ -207,7 +207,7 @@ def build_library():
             'r': s['rating'] if s['rating'] not in (None, '', 'N/A') else '', 'g': s['genre'] or '', 'p': s['plot'] or '',
             'add': max(g['added_at'] or 0 for g in group), 'tm': s['tmdb_id'] or 0,
             'ph': _pv(s['poster']), 'bd': bool(s['backdrop']),
-            'eps': len(keys), 'seasons': len({k[0] for k in keys}), 'k': is_kids(s['genre'], s['cert'], s['tmdb_id'], kids_in_tv, kids_out_tv)})
+            'eps': len([k for k in keys if k[0]]) or len(keys), 'seasons': len({k[0] for k in keys if k[0]}) or 1, 'k': is_kids(s['genre'], s['cert'], s['tmdb_id'], kids_in_tv, kids_out_tv)})
     return {'movies': out_movies, 'series': out_series, 'collections': collections,
             'version': state.snapshot()['version']}
 
@@ -253,8 +253,11 @@ def api_series(sid):
     seasons = defaultdict(list)
     for e in eps:
         p = prog.get(f"e:{e['id']}")
+        name = e['ep_name'] or ''
+        if not name and e['season'] == 0 and e['episode'] >= EXTRA_BASE:
+            name = extra_title(e['filename'])
         seasons[e['season']].append({
-            'id': e['id'], 'n': e['episode'], 'name': e['ep_name'] or '', 'file': e['filename'],
+            'id': e['id'], 'n': e['episode'], 'x': e['episode'] >= EXTRA_BASE, 'name': name, 'file': e['filename'],
             'ov': e['ep_overview'] or '', 'still': bool(e['still']), 'rt': e['runtime'] or 0,
             'pos': p['position'] if p else 0, 'dur': p['duration'] if p else 0, 'fin': bool(p and p['finished']),
             'at': p['updated_at'] if p else 0})
@@ -263,7 +266,9 @@ def api_series(sid):
         pending = [n for n in seasons if n not in fetched]
         for n in pending:
             threading.Thread(target=metadata.fetch_season, args=(sid, s['tmdb_id'], n, ids), daemon=True).start()
-    return jsonify({'id': sid, 'seasons': [{'n': n, 'eps': seasons[n]} for n in sorted(seasons)], 'pending': bool(pending)})
+    # Season 0 (specials and extras) comes last.
+    order_s = sorted(seasons, key=lambda n: (n == 0, n))
+    return jsonify({'id': sid, 'seasons': [{'n': n, 'eps': seasons[n]} for n in order_s], 'pending': bool(pending)})
 
 
 @app.route('/api/credits/<kind>/<int:iid>')
@@ -293,6 +298,10 @@ def sibling_ids(c, series_id):
 def next_episode(c, e):
     ids = sibling_ids(c, e['series_id'])
     q = ','.join('?' * len(ids))
+    # Autoplay stays within the episodes or within the extras: the last episode doesn't roll into the specials.
+    if e['season'] == 0:
+        return c.execute(f"SELECT * FROM episodes WHERE series_id IN ({q}) AND season = 0 AND episode > ? "
+                         f"ORDER BY episode, id LIMIT 1", (*ids, e['episode'])).fetchone()
     return c.execute(f"SELECT * FROM episodes WHERE series_id IN ({q}) AND (season > ? OR (season = ? AND episode > ?)) "
                      f"ORDER BY season, episode, id LIMIT 1", (*ids, e['season'], e['season'], e['episode'])).fetchone()
 

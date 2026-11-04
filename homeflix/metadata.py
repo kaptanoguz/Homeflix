@@ -550,7 +550,7 @@ def fetch_season(series_id, tmdb_id, season, ids=None):
             for ep in (d or {}).get('episodes') or []:
                 for sid in ids or [series_id]:
                     c.execute("UPDATE episodes SET ep_name = ?, ep_overview = ?, still = ?, runtime = ? "
-                              "WHERE series_id = ? AND season = ? AND episode = ?",
+                              "WHERE series_id = ? AND season = ? AND episode = ? AND episode < 1000",
                               (ep.get('name'), ep.get('overview'), ep.get('still_path'), ep.get('runtime'),
                                sid, season, ep.get('episode_number')))
             c.execute("INSERT OR REPLACE INTO season_fetch (series_id, season, fetched_at) VALUES (?, ?, ?)",
