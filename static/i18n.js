@@ -109,6 +109,10 @@ const EN = {
   'Cihaz başına 1 dosya': '1 file per device', 'Televizyonlar': 'TVs', 'İndirme düğmesi gizli': 'Download button hidden',
   'Bu adreslerden biri': 'One of these addresses', 'Uygulama': 'App', 'Lisans': 'License', 'Film bilgileri': 'Movie details',
   'Bu sunucu': 'This server',
+  'QR kod': 'QR code', 'Telefonun kamerasıyla okutun': 'Scan it with your phone camera',
+  'Homeflix açılır. Sonra tarayıcıda “Ana ekrana ekle” derseniz uygulama gibi kalır.': 'Homeflix opens. Choose “Add to Home screen” in the browser to keep it like an app.',
+  'Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli. Homeflix TV uygulaması sunucuyu ağda kendisi bulur.':
+    'Open this address in a phone, tablet or TV browser on the same Wi-Fi. The Homeflix TV app finds the server on the network by itself.',
   'Hepsi': 'Any', 'En düşük puan': 'Minimum rating',
   'Ayarlar kaydedildi, tarama başladı': 'Settings saved, scan started', 'Diskteki dosyalar taranıyor…': 'Scanning files on disk…',
   'Eksik bilgiler yeniden aranıyor': 'Looking up missing details again',

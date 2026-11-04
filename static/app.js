@@ -464,7 +464,13 @@ function detailHero(it, title, actions, metaHTML) {
   const posterSrc = it.online ? (it.op ? `${TMDB_IMG}w342${it.op}` : '') : it.kind !== 'c' && it.ph ? img(kind, it.id, 'poster', 500) : '';
   const fallback = posterSrc ? `<img class="blurposter" src="${posterSrc}" alt="">` : `<div class="ph" style="--h:${hue(title)}"></div>`;
   return `<div class="d-hero">${bdSrc ? `<img src="${bdSrc}" alt="" onload="this.classList.add('ok')" onerror="this.outerHTML=this.dataset.fb" data-fb='${esc(fallback)}'>` : fallback}
-    <div class="d-head"><h1>${esc(title)}</h1>${metaHTML ? `<div class="meta" style="margin-bottom:18px">${metaHTML}</div>` : ''}<div class="actions">${actions}</div></div></div>`;
+    <div class="d-head"><h1>${esc(title)}</h1>${metaHTML ? `<div class="meta" style="margin-bottom:18px">${metaHTML}</div>` : ''}<div class="d-prov" id="d-prov"></div><div class="actions">${actions}</div></div></div>`;
+}
+// Logos of the streaming services that carry the title in Turkey, with no heading (Oğuz's wish). Saved on the server.
+function fillProviders(list, key) {
+  const box = $('#d-prov');
+  if (!box || detailKey !== key || !list?.length) return;
+  box.innerHTML = list.map(p => `<img src="/img/tmdb/w92${esc(p.l)}" alt="${esc(p.n)}" title="${esc(p.n)}" onerror="this.remove()">`).join('');
 }
 
 // Downloads are for phones and computers; TVs (webOS, the Android TV app's WebView) have nowhere to save a file.
@@ -530,6 +536,7 @@ function renderDetail(it) {
       ${versions}
       ${similar.length ? `<div class="section"><div class="section-head"><h3>${T('Benzer İçerikler')}</h3></div><div class="grid">${similar.map(x => posterCard(x, { caption: true })).join('')}</div></div>` : ''}
     </div>`;
+  loadCredits(it).then(cr => fillProviders(cr.prov, it.key));
 }
 
 function renderCollectionDetail(c) {
@@ -791,10 +798,17 @@ const ST_PANELS = {
     <div class="st-tiles">${stTile(T('Aynı anda'), T('Cihaz başına 1 dosya'))}${stTile(T('Televizyonlar'), T('İndirme düğmesi gizli'))}</div>
     ${stHint(T('Bütün indirmeler birlikte bu hızı geçmez. Her cihaz aynı anda yalnızca bir dosya indirebilir.'))}`,
 
-  devices: s => `
+  devices: s => {
+    const urls = s.urls.length ? s.urls : [location.origin];
+    setTimeout(() => drawQR(urls[0]), 0);
+    return `
+    <div class="st-qr-box"><div class="st-qr" id="st-qr" aria-label="${T('QR kod')}: ${esc(urls[0])}"></div>
+      <div class="st-qr-text"><b>${T('Telefonun kamerasıyla okutun')}</b><small>${T('Homeflix açılır. Sonra tarayıcıda “Ana ekrana ekle” derseniz uygulama gibi kalır.')}</small>
+        <span class="st-mono">${esc(urls[0])}</span></div></div>
     ${stGroup(T('Bu adreslerden biri'))}
-    ${(s.urls.length ? s.urls : [location.origin]).map(u => stRow({ ic: 'globe', title: `<span class="st-mono">${esc(u)}</span>`, attrs: `data-copy="${esc(u)}" aria-label="${T('Kopyala')}: ${esc(u)}"`, end: icon('copy', 'st-end') })).join('')}
-    ${stHint(T('Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli.'))}`,
+    ${urls.map(u => stRow({ ic: 'globe', title: `<span class="st-mono">${esc(u)}</span>`, attrs: `data-copy="${esc(u)}" aria-label="${T('Kopyala')}: ${esc(u)}"`, end: icon('copy', 'st-end') })).join('')}
+    ${stHint(T('Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli. Homeflix TV uygulaması sunucuyu ağda kendisi bulur.'))}`;
+  },
 
   lang: () => `
     ${LANGS.map(([v, l]) => stRow({ ic: 'lang', title: l, on: LANG === v, attrs: `data-lang="${v}" role="radio" aria-checked="${LANG === v}"`, end: LANG === v ? icon('check', 'st-end') : '' })).join('')}
@@ -1776,6 +1790,7 @@ function renderOnlineDetail(it, data) {
       ${it.kind === 'os' ? `<div class="section" id="episodes"><div class="section-head"><h3>${T('Bölümler')}</h3></div><div class="eps">${data ? '<div class="spin" style="margin:20px auto"></div>' : ''}</div></div>` : ''}
       ${rec.length ? `<div class="section"><div class="section-head"><h3>${T('Benzer İçerikler')}</h3></div><div class="grid">${rec.map(x => posterCard(x, { caption: true })).join('')}</div></div>` : ''}
     </div>`;
+  fillProviders(data?.prov, detailKey);
 }
 
 // Where "Play" starts a series: after the last episode watched (or in it, if unfinished), else the first one.
@@ -2122,6 +2137,26 @@ function showOSD(ch, typed) {
   osd.classList.add('show');
   clearTimeout(LV.osdT);
   LV.osdT = setTimeout(() => osd.classList.remove('show'), typed ? 1600 : 3200);
+}
+
+// The QR code library is only loaded when Settings shows the address, so normal pages don't carry it.
+let qrLoading = null;
+function drawQR(url) {
+  if (!qrLoading) qrLoading = new Promise((ok, fail) => {
+    const sc = document.createElement('script');
+    sc.src = '/static/vendor/qrcode.js';
+    sc.onload = () => ok(window.qrcode);
+    sc.onerror = () => { qrLoading = null; fail(); };
+    document.head.appendChild(sc);
+  });
+  qrLoading.then(qrcode => {
+    const box = $('#st-qr');
+    if (!box) return;
+    const q = qrcode(0, 'M');
+    q.addData(url);
+    q.make();
+    box.innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+  }).catch(() => {});
 }
 
 let hlsLoading = null;
