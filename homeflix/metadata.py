@@ -398,8 +398,14 @@ def providers(d):
     Each service shows once, whatever plan or reseller it is listed under. Network logos are wide ('w': 1) and
     are drawn on a light tile. At most six."""
     nets = [{'n': n.get('name') or '', 'l': n['logo_path'], 'w': 1} for n in d.get('networks') or []
-            if n.get('logo_path') and _service(n.get('name')) in _STREAMING_NETWORKS][:2]
+            if n.get('logo_path') and _service(n.get('name')) in _STREAMING_NETWORKS]
     region = _region_providers(d, WATCH_REGION) or _region_providers(d, 'US')
+    # TMDb can list the same network twice (MobLand: Paramount+ twice).
+    uniq = []
+    for n in nets:
+        if not any(_same_service(n['n'], q['n']) for q in uniq):
+            uniq.append(n)
+    nets = uniq[:2]
     out = []
     for p in region:
         if not any(_same_service(p['n'], q['n']) for q in out):
