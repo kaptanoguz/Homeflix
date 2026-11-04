@@ -24,7 +24,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install -q flask waitress requests pillow pywebview pyinstaller
+        pip install -q flask waitress requests pillow qrcode pywebview pyinstaller
 
     - name: Build executable
       run: python -u build_windows.py

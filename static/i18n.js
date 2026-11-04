@@ -64,8 +64,6 @@ const EN = {
   'Kütüphane': 'Library', 'Film klasörü': 'Movies folder', 'Dizi klasörü': 'Series folder', 'OMDb API anahtarı': 'OMDb API key',
   'Kaydet ve Tara': 'Save and Scan', 'Yeniden Tara': 'Rescan', 'Eksik Bilgileri Tekrar Ara': 'Look Up Missing Details Again',
   'Diğer cihazlardan bağlan': 'Connect from other devices', 'Kopyala': 'Copy',
-  'Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli.':
-    'Open this address in a phone, tablet or TV browser. The device only needs to be on the same Wi-Fi network.',
   'Klavye kısayolları': 'Keyboard shortcuts', 'Boşluk': 'Space', 'Oynat / Duraklat': 'Play / Pause',
   '10 sn geri / ileri': '10 s back / forward', 'Ses': 'Volume', 'Tam ekran': 'Full screen', 'Sessiz': 'Mute',
   'Ses ve altyazı': 'Audio and subtitles', 'Sonraki bölüm': 'Next episode',
@@ -95,6 +93,9 @@ const EN = {
   'Bu klasör açılamadı': 'This folder could not be opened', 'Klasör eklendi, tarama başladı': 'Folder added, scan started',
   '{d} kütüphaneden çıkarılsın mı? Diskteki dosyalar silinmez.': 'Remove {d} from the library? The files on disk are not deleted.',
   'Klasör çıkarıldı': 'Folder removed', 'Anahtarı kaydeder ve kütüphaneyi baştan tarar.': 'Saves the key and scans the library again.',
+  'Telefonun kamerasıyla okutun': 'Scan it with your phone camera',
+  'Homeflix telefonda açılır. Tarayıcının menüsünden “Ana ekrana ekle” derseniz uygulama gibi açılır.': 'Homeflix opens on the phone. Choose “Add to Home screen” in the browser menu to open it like an app.',
+  'Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli. Homeflix TV uygulaması sunucuyu ağda kendisi bulur.': 'Open this address in a phone, tablet or TV browser on the same Wi-Fi network. The Homeflix TV app finds the server on the network by itself.',
   'Klasörler': 'Folders', 'Klasörleri kaydeder ve kütüphaneyi baştan tarar.': 'Saves the folders and scans the library again.',
   'Tarama': 'Scanning', 'Diskteki yeni ve silinen dosyaları bulur.': 'Finds new and deleted files on disk.',
   'Bilgisi veya afişi bulunamayan içerikleri yeniden arar.': 'Looks again for titles that are missing details or posters.',

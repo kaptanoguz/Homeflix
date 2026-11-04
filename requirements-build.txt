@@ -5,3 +5,4 @@ flask>=3.0
 waitress>=3.0
 requests>=2.31
 pywebview>=5.0
+qrcode>=7.4

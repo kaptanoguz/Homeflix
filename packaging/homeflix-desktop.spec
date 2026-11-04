@@ -14,7 +14,7 @@ a = Analysis(
     [os.path.join(ROOT, 'app.py')],
     pathex=[ROOT],
     datas=[(os.path.join(ROOT, 'templates'), 'templates'), (os.path.join(ROOT, 'static'), 'static')],
-    hiddenimports=['waitress', 'webview'],
+    hiddenimports=['waitress', 'webview', 'qrcode.image.svg'],
     excludes=['matplotlib', 'numpy', 'pandas', 'tkinter'],
     noarchive=False,
 )

@@ -22,9 +22,23 @@ import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
+import java.net.SocketTimeoutException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends Activity {
@@ -47,6 +61,10 @@ public class MainActivity extends Activity {
 
     private static final int RETRY_MS = 5000;
     private static final String ADDRESS_HINT = "Bilgisayarın adresini girin (örn. 10.1.5.74:5000)";
+    // Homeflix sunucusu bu UDP portundaki soruya adresiyle cevap verir (homeflix/discovery.py).
+    private static final int DISCOVERY_PORT = 5099;
+    private static final String DISCOVER_QUERY = "HOMEFLIX_DISCOVER";
+    private volatile boolean discovering;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,9 +92,9 @@ public class MainActivity extends Activity {
 
         navJs = readAsset("tv-nav.js");
         setupWebView();
-        // Adres yalnızca ilk açılışta sorulur; sonra kayıtlı adres kullanılır.
+        // İlk açılışta sunucu ağda aranır; bulunamazsa adres sorulur. Sonra kayıtlı adres kullanılır.
         if (hasSavedUrl()) load(currentUrl());
-        else showAddressDialog("Homeflix'in çalıştığı bilgisayarın adresini girin. Bir kez sorulur, sonra hatırlanır.");
+        else findOnFirstLaunch();
     }
 
     private void setupWebView() {
@@ -180,6 +198,112 @@ public class MainActivity extends Activity {
         offlineView.setVisibility(View.VISIBLE);
         handler.removeCallbacks(retry);
         handler.postDelayed(retry, RETRY_MS);
+        // Modem bilgisayara yeni bir adres vermiş olabilir: ağda tek bir Homeflix varsa ona geçer.
+        discover(servers -> {
+            if (!offline || servers.size() != 1) return;
+            String url = servers.get(0)[0];
+            if (!url.equals(currentUrl())) connect(url);
+        });
+    }
+
+    // ---- Sunucuyu ağda bulma ----
+
+    private interface Found {
+        void done(List<String[]> servers);  // her biri {adres, bilgisayar adı}
+    }
+
+    private void findOnFirstLaunch() {
+        offline = true;
+        offlineView.setText("HOMEFLIX\n\nHomeflix sunucusu ağda aranıyor…");
+        offlineView.setVisibility(View.VISIBLE);
+        discover(servers -> {
+            if (servers.size() == 1) connect(servers.get(0)[0]);
+            else if (servers.size() > 1) chooseServer(servers);
+            else showAddressDialog("Homeflix ağda bulunamadı. Bilgisayar açık ve aynı ağda mı? "
+                    + "Bilgisayarın adresini girin (Homeflix'te Ayarlar > Diğer cihazlar'da yazar).");
+        });
+    }
+
+    private void connect(String url) {
+        prefs().edit().putString(KEY_URL, url).apply();
+        load(url);
+    }
+
+    private void chooseServer(List<String[]> servers) {
+        if (dialog != null && dialog.isShowing()) return;
+        String[] labels = new String[servers.size()];
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = servers.get(i)[1] + "  (" + Uri.parse(servers.get(i)[0]).getAuthority() + ")";
+        }
+        handler.removeCallbacks(retry);
+        dialog = new AlertDialog.Builder(this)
+                .setTitle("Homeflix sunucusunu seçin")
+                .setItems(labels, (d, i) -> connect(servers.get(i)[0]))
+                .setOnCancelListener(d -> load(currentUrl()))
+                .show();
+    }
+
+    // Ağa yayın yapıp ~2 saniye cevap bekler. Adres cevabı gönderenden alınır; böylece modem bilgisayara
+    // yeni bir IP verse de sunucu bulunur.
+    private void discover(Found cb) {
+        if (discovering) return;
+        discovering = true;
+        new Thread(() -> {
+            List<String[]> found = new ArrayList<>();
+            Set<String> seen = new LinkedHashSet<>();
+            try (DatagramSocket sock = new DatagramSocket()) {
+                sock.setBroadcast(true);
+                sock.setSoTimeout(400);
+                byte[] q = DISCOVER_QUERY.getBytes(StandardCharsets.UTF_8);
+                Set<InetAddress> targets = broadcastAddresses();
+                long end = System.currentTimeMillis() + 2000;
+                int sent = 0;
+                while (System.currentTimeMillis() < end) {
+                    if (sent++ < 3) {
+                        for (InetAddress a : targets) {
+                            try {
+                                sock.send(new DatagramPacket(q, q.length, a, DISCOVERY_PORT));
+                            } catch (Exception ignored) {
+                            }
+                        }
+                    }
+                    byte[] buf = new byte[512];
+                    DatagramPacket p = new DatagramPacket(buf, buf.length);
+                    try {
+                        sock.receive(p);
+                    } catch (SocketTimeoutException e) {
+                        continue;
+                    }
+                    try {
+                        JSONObject o = new JSONObject(new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8));
+                        if (!"homeflix".equals(o.optString("app"))) continue;
+                        String url = "http://" + p.getAddress().getHostAddress() + ":" + o.optInt("port", 5000);
+                        if (seen.add(url)) found.add(new String[]{url, o.optString("name", url)});
+                    } catch (Exception ignored) {
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+            handler.post(() -> {
+                discovering = false;
+                cb.done(found);
+            });
+        }).start();
+    }
+
+    private static Set<InetAddress> broadcastAddresses() {
+        Set<InetAddress> out = new LinkedHashSet<>();
+        try {
+            out.add(InetAddress.getByName("255.255.255.255"));
+            for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (!ni.isUp() || ni.isLoopback()) continue;
+                for (InterfaceAddress ia : ni.getInterfaceAddresses()) {
+                    if (ia.getBroadcast() != null) out.add(ia.getBroadcast());
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
     }
 
     private void hideOffline() {
@@ -218,6 +342,14 @@ public class MainActivity extends Activity {
                     prefs().edit().putString(KEY_URL, u).apply();
                     load(u);
                 })
+                .setNeutralButton("Ağda ara", (d, w) -> discover(servers -> {
+                    if (servers.size() == 1) connect(servers.get(0)[0]);
+                    else if (servers.size() > 1) chooseServer(servers);
+                    else {
+                        Toast.makeText(this, "Ağda Homeflix bulunamadı", Toast.LENGTH_LONG).show();
+                        showAddressDialog(ADDRESS_HINT);
+                    }
+                }))
                 .setNegativeButton("İptal", (d, w) -> load(currentUrl()))
                 .setOnCancelListener(d -> load(currentUrl()))
                 .show();

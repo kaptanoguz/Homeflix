@@ -792,9 +792,11 @@ const ST_PANELS = {
     ${stHint(T('Bütün indirmeler birlikte bu hızı geçmez. Her cihaz aynı anda yalnızca bir dosya indirebilir.'))}`,
 
   devices: s => `
+    <div class="st-qr"><img src="/api/qr.svg?text=${encodeURIComponent(s.urls[0] || location.origin)}" alt="" onerror="this.parentNode.remove()">
+      <p><b>${T('Telefonun kamerasıyla okutun')}</b>${T('Homeflix telefonda açılır. Tarayıcının menüsünden “Ana ekrana ekle” derseniz uygulama gibi açılır.')}</p></div>
     ${stGroup(T('Bu adreslerden biri'))}
     ${(s.urls.length ? s.urls : [location.origin]).map(u => stRow({ ic: 'globe', title: `<span class="st-mono">${esc(u)}</span>`, attrs: `data-copy="${esc(u)}" aria-label="${T('Kopyala')}: ${esc(u)}"`, end: icon('copy', 'st-end') })).join('')}
-    ${stHint(T('Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli.'))}`,
+    ${stHint(T('Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli. Homeflix TV uygulaması sunucuyu ağda kendisi bulur.'))}`,
 
   lang: () => `
     ${LANGS.map(([v, l]) => stRow({ ic: 'lang', title: l, on: LANG === v, attrs: `data-lang="${v}" role="radio" aria-checked="${LANG === v}"`, end: LANG === v ? icon('check', 'st-end') : '' })).join('')}

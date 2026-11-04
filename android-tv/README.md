@@ -8,10 +8,14 @@ Sunucu bilgisayarda kalır; TV sadece arayüzü gösterir. mkv/avi dönüştürm
 ## Kullanım
 
 1. Bilgisayarda: `./run.sh --headless` (gerekirse `sudo ufw allow 5000/tcp`)
-2. Bilgisayara sabit IP verin (router'dan DHCP rezervasyonu).
-3. APK'yı TV'ye kurun, açın. İlk açılışta adres sorulur (varsayılan `10.1.5.74:5000`), sonra hatırlanır.
-   Sunucuya ulaşılamazsa uygulama 5 saniyede bir tekrar dener; adresi değiştirmek için o ekranda **OK** tuşuna
-   (ya da kumandada varsa **MENU** tuşuna) basın.
+2. APK'yı TV'ye kurun, açın. Uygulama ağdaki Homeflix sunucusunu kendisi bulur (UDP 5099 üzerinden) ve
+   adresini hatırlar. Ağda birden fazla Homeflix varsa hangisine bağlanacağınız sorulur; hiç bulunamazsa adres
+   sorulur.
+   Sunucuya ulaşılamazsa uygulama 5 saniyede bir tekrar dener ve ağda yeniden arar: modem bilgisayara yeni bir
+   IP verdiyse yeni adrese kendisi geçer. Adresi elle değiştirmek için o ekranda **OK** tuşuna (ya da kumandada
+   varsa **MENU** tuşuna) basın; adres penceresindeki **Ağda ara** düğmesi sunucuyu tekrar arar.
+3. Güvenlik duvarı açıksa 5000/tcp ile birlikte 5099/udp'ye de izin verin (`sudo ufw allow 5099/udp`).
+   Bilgisayara modemden sabit IP vermek (DHCP rezervasyonu) tarayıcıdan bağlanan cihazlar için yine faydalıdır.
 
 Kumanda: yön tuşları gezinir, merkez tuşu tıklar, geri tuşu geri gider. Oynatıcıda play/pause, ileri/geri sarma tuşları çalışır;
 tam ekranda sol/sağ ±10 sn, merkez oynat/durdur.

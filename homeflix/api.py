@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 from collections import defaultdict
+from io import BytesIO
 
 from urllib.parse import quote
 
@@ -907,6 +908,22 @@ def _browse_roots():
         except OSError:
             pass
     return roots
+
+
+@app.route('/api/qr.svg')
+def api_qr():
+    """A QR code of an address (Settings > Other devices), so a phone opens Homeflix by pointing its camera at it."""
+    text = request.args.get('text', '')[:300]
+    try:
+        import qrcode
+        import qrcode.image.svg
+    except ImportError:
+        abort(404)
+    out = BytesIO()
+    qrcode.make(text, image_factory=qrcode.image.svg.SvgPathFillImage, border=2).save(out)
+    resp = Response(out.getvalue(), mimetype='image/svg+xml')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
 
 
 @app.route('/api/browse')

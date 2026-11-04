@@ -375,6 +375,10 @@ main { min-height: 100vh; }
 .st-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-gap: 10px; margin-bottom: 10px; }
 .st-tiles.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .st-tiles.one { grid-template-columns: 1fr; }
+.st-qr { display: flex; align-items: center; margin-bottom: 18px; padding: 16px; border-radius: 14px; background: rgba(255,255,255,.05); }
+.st-qr img { width: 148px; height: 148px; flex-shrink: 0; margin-right: 20px; border-radius: 10px; background: #fff; }
+.st-qr p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.st-qr b { display: block; margin-bottom: 4px; color: #fff; font-size: 16px; }
 .st-tile { padding: 14px 18px; border-radius: 16px; background: rgba(255,255,255,.055); min-width: 0; }
 .st-tile small { display: block; color: var(--muted); font-size: 12.5px; }
 .st-tile b { display: block; margin-top: 2px; font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
