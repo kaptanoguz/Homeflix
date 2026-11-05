@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from flask import Flask, Response, abort, g, jsonify, render_template, request, send_file
 
-from . import clips, downloads, library, livetv, media, metadata, online, state, subtitles
+from . import clipmeta, clips, downloads, library, livetv, media, metadata, online, state, subtitles
 from .config import BASE_DIR, ONLINE_EMBED, POSTERS_DIR
 from .db import LOCAL_VIEWER, library_dirs, load_settings, save_settings, session
 from .names import EXTRA_BASE, extra_title, fold, sequel_key
@@ -799,7 +799,18 @@ def api_online_season(tm, n):
 
 @app.route('/api/clips')
 def api_clips():
-    return jsonify({'clips': clips.listing()})
+    en = request_lang() == 'en'
+    artists = {k: {**{x: v for x, v in a.items() if not x.startswith('bio_')}, 'bio': (a['bio_en'] if en else a['bio_tr']) or a['bio_en']}
+               for k, a in clipmeta.artists().items()}
+    return jsonify({'clips': clips.listing(), 'artists': artists})
+
+
+@app.route('/img/clipart/<name>')
+def img_clipart(name):
+    if not re.fullmatch(r'[pb]_[0-9a-f]{16}\.jpg', name) or not os.path.exists(clipmeta.art_path(name)):
+        abort(404)
+    w = request.args.get('w', 0, type=int)
+    return _send_image(clipmeta.art_path(name), w if 0 < w < 1280 else None)
 
 
 @app.route('/img/clip/<int:cid>')

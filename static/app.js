@@ -408,6 +408,7 @@ function route() {
   const [view, arg] = (location.hash.slice(1) || 'home').split('/');
   S.view = ['home', 'movies', 'series', 'collections', 'kids', 'list', 'online', 'live', 'clips'].includes(view) ? view : 'home';
   if ((S.view === 'movies' || S.view === 'series')) S.browse[S.view].genre = arg ? decodeURIComponent(arg) : '';
+  if (S.view === 'clips') CL.artist = arg ? decodeURIComponent(arg) : '';
   $$('[data-tab]').forEach(t => t.classList.toggle('active', t.dataset.tab === S.view));
   render();
   window.scrollTo(0, 0);
@@ -1638,7 +1639,8 @@ function playerKeys(e) {
 // Clips from the music video folders (Settings › Library), named "Artist - Song.mp4". A clip plays in the normal player
 // and the list it was started from carries on by itself, like a playlist (the last one wraps to the first). Clips
 // have no Continue Watching entry and no subtitles.
-const CL = { items: null, byId: new Map(), error: false, q: '', sort: store.get('clip_sort', 'artist'), lists: {} };
+// Artist photos, backgrounds, year and album come from Deezer and TheAudioDB through the server, which keeps them.
+const CL = { items: null, byId: new Map(), artists: {}, artist: '', error: false, q: '', sort: store.get('clip_sort', 'artist'), lists: {} };
 const CLIP_SORTS = [['artist', 'Sanatçı (A–Z)'], ['added', 'Yeni eklenen'], ['title', 'Şarkı (A–Z)']];
 
 async function loadClips() {
@@ -1646,6 +1648,7 @@ async function loadClips() {
     const r = await api.get('/api/clips');
     CL.items = r.clips.map(c => ({ ...c, search: fold(`${c.a} ${c.t}`) }));
     CL.byId = new Map(CL.items.map(c => [c.id, c]));
+    CL.artists = r.artists || {};
     CL.error = false;
   } catch { CL.error = !CL.items; }
 }
@@ -1661,14 +1664,31 @@ function clipCard(c, list, i) {
       ${c.th >= 0 ? `<img src="/img/clip/${c.id}?w=480&v=${c.th}" alt="" loading="lazy" decoding="async" onload="this.classList.add('ok')" onerror="this.remove()">` : ''}
       ${c.d ? `<span class="dur">${fmtTime(c.d)}</span>` : ''}
       <div class="play-glyph">${icon('play', 'fill')}</div>
-      <div class="shade"><strong>${esc(c.t)}</strong><span>${esc(clipArtist(c))}</span></div>
+      <div class="shade"><strong>${esc(c.t)}</strong><span>${esc(clipArtist(c))}${c.y ? ` · ${esc(c.y)}` : ''}</span></div>
     </div></div>`;
 }
-function clipRow(title, items, list) {
+const clipArt = (k, kind) => CL.artists[k]?.[kind] ? `/img/clipart/${CL.artists[k][kind]}` : '';
+function artistAvatar(name, k, w = 300) {
+  const src = clipArt(k, 'ph');
+  const initials = [...name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => [...x][0])].join('').toUpperCase();
+  return `<div class="av" style="--h:${hue(name)}"><span>${esc(initials)}</span>${src ? `<img src="${src}?w=${w}" alt="" loading="lazy" decoding="async" onload="this.classList.add('ok')" onerror="this.remove()">` : ''}</div>`;
+}
+const artistHref = name => `#clips/${encodeURIComponent(name)}`;
+function artistCard(name, list) {
+  return `<a class="card artist" href="${artistHref(name)}" aria-label="${esc(name)}">${artistAvatar(name, list[0].k)}
+    <strong>${esc(name)}</strong><small>${T('{n} klip', { n: list.length })}</small></a>`;
+}
+function clipArtists() {
+  const m = new Map();
+  CL.items.forEach(c => { if (c.a) m.set(c.a, [...(m.get(c.a) || []), c]); });
+  return m;
+}
+function clipRow(title, items, list, artist = false) {
   if (!items.length) return '';
   CL.lists[list] = items;
+  const h = artist ? `<a class="cl-ah" href="${artistHref(title)}">${artistAvatar(title, items[0].k, 120)}<h2>${esc(title)}</h2>${icon('right')}</a>` : `<h2>${esc(title)}</h2>`;
   return `<section class="row">
-    <div class="row-head"><h2>${esc(title)}</h2></div>
+    <div class="row-head">${h}</div>
     <div class="rail-wrap">
       <button class="rail-btn prev" aria-label="${T('Geri')}" hidden>${icon('left')}</button>
       <div class="rail wide">${items.map((c, i) => clipCard(c, list, i)).join('')}</div>
@@ -1697,12 +1717,12 @@ async function renderClips() {
     return;
   }
   const all = CL.items;
+  if (CL.artist) return renderClipArtist();
   if (!all.length) {
     view.innerHTML = head('') + `<div class="grid">${emptyState('Henüz klip yok', 'Ayarlar › Kütüphane bölümünden müzik klibi klasörü ekleyin.', 'music')}</div>`;
     return;
   }
-  const artists = new Map();
-  all.forEach(c => { if (c.a) artists.set(c.a, [...(artists.get(c.a) || []), c]); });
+  const artists = clipArtists();
   CL.lists = {};
   let html = head(`${T('{n} klip', { n: all.length })} · ${T('{n} sanatçı', { n: artists.size })}`) + `
     <div class="lv-tools cl-tools">
@@ -1712,8 +1732,15 @@ async function renderClips() {
     </div>`;
   if (!CL.q.trim()) {
     html += '<div class="rows cl-rows">' + clipRow(T('Son Eklenenler'), sortClips(all, 'added').slice(0, 20), 'new');
+    // Artists with a photo first, then by number of clips.
+    const byCount = [...artists.entries()].sort((a, b) => (!!clipArt(b[1][0].k, 'ph') - !!clipArt(a[1][0].k, 'ph')) ||
+      b[1].length - a[1].length || collator.compare(a[0], b[0]));
+    html += `<section class="row"><div class="row-head"><h2>${T('Sanatçılar')}</h2></div><div class="rail-wrap">
+      <button class="rail-btn prev" aria-label="${T('Geri')}" hidden>${icon('left')}</button>
+      <div class="rail artists">${byCount.slice(0, 40).map(([a, v]) => artistCard(a, v)).join('')}</div>
+      <button class="rail-btn next" aria-label="${T('İleri')}">${icon('right')}</button></div></section>`;
     [...artists.entries()].filter(([, v]) => v.length >= 3).sort((a, b) => b[1].length - a[1].length || collator.compare(a[0], b[0]))
-      .slice(0, 8).forEach(([a, v], i) => { html += clipRow(a, sortClips(v, 'title'), 'a' + i); });
+      .slice(0, 8).forEach(([a, v], i) => { html += clipRow(a, sortClips(v, 'title'), 'a' + i, true); });
     html += `</div><h2 class="lv-sec">${T('Tüm Klipler')}</h2>`;
   }
   view.innerHTML = html + `<div class="grid clips" id="cl-grid">${clipGrid()}</div>`;
@@ -1729,6 +1756,28 @@ async function renderClips() {
       else $('#cl-grid').innerHTML = clipGrid();
     }, 120);
   });
+}
+
+// One artist: background art (or the photo, blurred), photo, genre and country, biography, then the clips.
+function renderClipArtist() {
+  const name = CL.artist;
+  const list = sortClips(CL.items.filter(c => fold(c.a) === fold(name)), 'title');
+  if (!list.length) { CL.artist = ''; history.replaceState(history.state, '', '#clips'); return renderClips(); }
+  const k = list[0].k, info = CL.artists[k] || {}, bg = clipArt(k, 'bg') || clipArt(k, 'ph');
+  const years = [...new Set(list.map(c => c.y).filter(Boolean))].sort();
+  const meta = [tx(info.g || ''), info.c, T('{n} klip', { n: list.length }), years.length ? (years.length > 1 ? `${years[0]}–${years[years.length - 1]}` : years[0]) : '']
+    .filter(Boolean).map(esc).join(' · ');
+  CL.lists = { artist: list };
+  $('#view').innerHTML = `<header class="cl-hero${clipArt(k, 'bg') ? '' : ' blur'}">
+      ${bg ? `<img class="cl-bg" src="${bg}?w=1280" alt="" onload="this.classList.add('ok')" onerror="this.remove()">` : ''}
+      <div class="cl-hero-in">${artistAvatar(name, k, 400)}
+        <div class="cl-hero-txt"><a class="cl-back" href="#clips">${icon('back')}${T('Müzik Klipleri')}</a><h1>${esc(list[0].a)}</h1>
+          <div class="meta">${meta}</div>
+          ${info.bio ? `<p class="cl-bio">${esc(info.bio)}</p>` : ''}
+          <div class="actions"><button class="btn btn-play" data-clip="artist:0">${icon('play', 'fill')}${T('Oynat')}</button>
+            ${list.length > 1 ? `<button class="btn btn-ghost" data-action="clips-shuffle-artist">${icon('shuffle')}${T('Karışık Çal')}</button>` : ''}</div>
+        </div></div></header>
+    <div class="grid clips">${list.map((c, i) => clipCard(c, 'artist', i)).join('')}</div>`;
 }
 
 // Plays clip i of a list, then the rest of the list in order.
@@ -2620,6 +2669,7 @@ document.addEventListener('click', async e => {
     if (a === 'live-retry') { LV.error = false; return renderLive(); }
     if (a === 'clips-retry') { CL.error = false; return renderClips(); }
     if (a === 'clips-shuffle') return playClips(shuffle(CL.items || []), 0);
+    if (a === 'clips-shuffle-artist') return playClips(shuffle(CL.lists.artist || []), 0);
     return settingsAction(a);
   }
   if (t.hasAttribute('data-dismiss')) back();

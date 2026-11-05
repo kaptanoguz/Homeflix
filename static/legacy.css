@@ -73,3 +73,14 @@
 .card .caption span > .score { margin-left: 8px; }  /* follows the year as a bare text node */
 .pp-inner > * + * { margin-top: 26px; }
 @media (max-width: 860px) { .pp-inner > * + * { margin-top: 18px; } .pp-main > * + * { margin-left: 14px; } }
+
+/* music videos */
+.av { height: 0; padding-top: 100%; }
+.av span { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); text-align: center; }
+.cl-ah .av { height: 0; }
+.cl-ah > * + * { margin-left: 12px; }
+.card.artist > * + * { margin-top: 4px; }
+.cl-hero-in > * + * { margin-left: 32px; }
+.cl-tools > * { margin-right: 14px; margin-bottom: 10px; }
+.cl-back > * + * { margin-left: 6px; }
+@media (max-width: 760px) { .cl-hero-in > * + * { margin-left: 0; margin-top: 16px; } }

@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS online_titles (kind TEXT NOT NULL, tmdb_id INTEGER NO
 -- Music videos (the Music Videos tab). thumb: 0 = cover frame not made yet, 1 = ready, -1 = ffmpeg failed.
 CREATE TABLE IF NOT EXISTS music_videos (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT UNIQUE NOT NULL, artist TEXT,
     title TEXT, added_at REAL, size INTEGER, duration REAL, thumb INTEGER DEFAULT 0);
+-- Music video artists: photo and background (files in cache/clip_art), genre, country and biography (clipmeta.py).
+CREATE TABLE IF NOT EXISTS clip_artists (key TEXT PRIMARY KEY, name TEXT, deezer_id INTEGER, photo INTEGER DEFAULT 0,
+    bg INTEGER DEFAULT 0, genre TEXT, country TEXT, bio_tr TEXT, bio_en TEXT, fetched_at REAL);
 CREATE INDEX IF NOT EXISTS idx_episodes_series ON episodes(series_id, season, episode);
 """
 
@@ -59,6 +62,8 @@ EXTRA_COLUMNS = {
                  "ep_name_en": "TEXT", "ep_overview_en": "TEXT"},
     "collections": {"name_en": "TEXT", "overview_en": "TEXT"},
     "season_fetch": {"en_at": "REAL"},
+    # Year and album from Deezer; meta_at = when they were looked up (NULL = not yet).
+    "music_videos": {"year": "TEXT", "album": "TEXT", "meta_at": "REAL"},
 }
 
 
