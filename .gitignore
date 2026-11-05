@@ -37,3 +37,7 @@ secrets.json
 
 # Written by the Release workflow
 VERSION
+
+# The library database: watch history, My List, folder paths and settings stay on the server computer
+data/homeflix.db
+data/homeflix.db-*
