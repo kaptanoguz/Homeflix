@@ -1,7 +1,8 @@
 """Music videos: a flat folder (or several) of "Artist - Title.mp4" files, shown in their own tab.
 
-Clips need no online metadata. The scan reads artist and title from the file name, and a background worker makes a
-cover frame for each clip with ffmpeg, one at a time at the lowest CPU priority, so playback elsewhere isn't disturbed.
+The scan reads artist and title from the file name, and a background worker makes a cover frame for each clip with
+ffmpeg, one at a time at the lowest CPU priority, so playback elsewhere isn't disturbed. Artist photos, year and album
+come from the internet when the server has it (clipmeta.py).
 """
 import os
 import re
@@ -10,7 +11,7 @@ import threading
 import time
 from collections import Counter
 
-from . import state
+from . import clipmeta, state
 from .config import THUMBS_DIR, VIDEO_EXTS
 from .db import library_dirs, session
 from .names import fold
@@ -132,18 +133,20 @@ def scan(settings):
         _scan_lock.release()
     if changed:
         state.bump()
+        clipmeta.wake()
     start_thumbs()
 
 
 def listing():
     """All clips for the web app. Artist names that differ only in case ("BLOK3" / "Blok3") are shown one way."""
     with session() as c:
-        rows = c.execute("SELECT id, artist, title, added_at, duration, thumb FROM music_videos").fetchall()
+        rows = c.execute("SELECT id, artist, title, added_at, duration, thumb, year, album FROM music_videos").fetchall()
     spell = {}
     for key, names in _group(rows).items():
         spell[key] = Counter(names).most_common(1)[0][0]
-    return [{'id': r['id'], 'a': spell.get(fold(r['artist']).strip(), r['artist']), 't': r['title'],
-             'add': r['added_at'] or 0, 'd': round(r['duration'] or 0), 'th': r['thumb'] or 0} for r in rows]
+    return [{'id': r['id'], 'a': spell.get(fold(r['artist']).strip(), r['artist']), 'k': fold(r['artist']).strip(), 't': r['title'],
+             'add': r['added_at'] or 0, 'd': round(r['duration'] or 0), 'th': r['thumb'] or 0, 'y': r['year'] or '',
+             'al': r['album'] or ''} for r in rows]
 
 
 def _group(rows):

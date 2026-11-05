@@ -17,7 +17,7 @@ const EN = {
   'Ayarlar › Kütüphane bölümünden müzik klibi klasörü ekleyin.': 'Add a music video folder in Settings › Library.',
   'Klip bulunamadı': 'No music videos found', 'Klip listesi alınamadı': 'Could not load the music videos',
   'Müzik klibi klasörleri': 'Music video folders', 'Bu klasörü müzik klibi klasörü olarak ekle': 'Add this folder as a music video folder',
-  'Sonraki klip (N)': 'Next music video (N)', 'Sıradaki: {t}': 'Up next: {t}',
+  'Sonraki klip (N)': 'Next music video (N)', 'Sıradaki: {t}': 'Up next: {t}', 'Sanatçılar': 'Artists',
 
   // navigation and page titles
   'Homeflix ana sayfa': 'Homeflix home', 'Ana Sayfa': 'Home', 'Filmler': 'Movies', 'Diziler': 'Series',
