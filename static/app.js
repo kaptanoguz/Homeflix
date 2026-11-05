@@ -1031,7 +1031,7 @@ async function play(kind, id, opts = {}) {
   P.info = info;
   P.next = kind === 'v' ? clipNext() : info.next || null;
   $('#p-title').textContent = info.title;
-  $('#p-sub').textContent = tx(info.sub || '');
+  $('#p-sub').textContent = kind === 'v' ? (CL.byId.get(id)?.a || info.sub || '') : tx(info.sub || '');
   $('#p-next').hidden = !P.next;
   $('#p-next').title = T(kind === 'v' ? 'Sonraki klip (N)' : 'Sonraki bölüm (N)');
   loadCredits(playingItem());
@@ -1314,6 +1314,7 @@ function pauseHTML(it, cr) {
 
 function showPauseInfo() {
   const v = V(), pl = $('#player'), it = playingItem();
+  if (P.open && P.kind === 'v' && v.paused) return showClipPause();
   if (!P.open || !it || !v.paused) return;
   if (pl.classList.contains('loading')) { P.pauseT = setTimeout(showPauseInfo, 500); return; }
   const box = $('#p-pause'), key = `${P.kind}:${P.id}`;
@@ -1472,6 +1473,13 @@ async function playerAction(a, el) {
     case 'next': return playNext();
     case 'dismiss-next': return dismissUpNext();
     case 'similar': P.openAfter = el.dataset.key; return back();
+    case 'clip': {
+      // A suggestion keeps the current play order when it is part of it; otherwise its row becomes the new order.
+      const id = +el.dataset.id, list = CL.lists[el.dataset.sec] || [];
+      if (!(P.queue || []).includes(id)) P.queue = list.map(x => x.id);
+      const c = CL.byId.get(id);
+      return play('v', id, { from: 0, title: c?.t });
+    }
     case 'speed': {
       const speeds = [1, 1.25, 1.5, 2, 0.75];
       P.speed = speeds[(speeds.indexOf(P.speed) + 1) % speeds.length];
@@ -1779,6 +1787,53 @@ function renderClipArtist() {
         </div></div></header>
     <div class="grid clips">${list.map((c, i) => clipCard(c, 'artist', i)).join('')}</div>`;
 }
+
+// Pause screen of a music video: the artist (photo, genre, country, biography), the song's year and album, then the
+// artist's other clips and clips by similar artists (same genre, otherwise picked at random).
+function clipPauseCard(c, sec) {
+  return `<button class="pp-card clip" data-p="clip" data-id="${c.id}" data-sec="${sec}" title="${esc(`${clipArtist(c)} – ${c.t}`)}">
+    <div class="art"><div class="ph" style="--h:${hue(c.a || c.t)}">${esc(c.a || c.t)}</div>${c.th >= 0 ? `<img src="/img/clip/${c.id}?w=320&v=${c.th}" alt="" loading="lazy" onload="this.classList.add('ok')" onerror="this.remove()">` : ''}</div>
+    <b>${esc(c.t)}</b><small>${esc(clipArtist(c))}${c.y ? ` · ${esc(c.y)}` : ''}</small></button>`;
+}
+function clipSuggestions(c) {
+  const all = CL.items || [];
+  const same = sortClips(all.filter(x => x.k === c.k && x.id !== c.id), 'title');
+  const genre = (CL.artists[c.k]?.g || '').toLowerCase();
+  const others = all.filter(x => x.k !== c.k);
+  const alike = genre ? others.filter(x => (CL.artists[x.k]?.g || '').toLowerCase() === genre) : [];
+  const fill = shuffle(others.filter(x => !alike.includes(x)), c.id * 7 + daySeed);
+  const more = [...shuffle(alike, c.id + daySeed), ...fill].slice(0, 16);
+  CL.lists.pp_same = same; CL.lists.pp_more = more;
+  return { same, more };
+}
+function showClipPause() {
+  const c = CL.byId.get(P.id), pl = $('#player'), box = $('#p-pause');
+  if (!c) return;
+  if (pl.classList.contains('loading')) { P.pauseT = setTimeout(showPauseInfo, 500); return; }
+  pl.classList.add('paused-info');
+  const key = `v:${c.id}`;
+  if (box.dataset.for === key) return;
+  const info = CL.artists[c.k] || {}, { same, more } = clipSuggestions(c);
+  const facts = [['Albüm', c.al], ['Yıl', c.y], ['Tür', tx(info.g || '')], ['Ülke', info.c]]
+    .filter(f => f[1]).map(([k, v]) => `<div><span>${T(k)}</span><b>${esc(v)}</b></div>`).join('');
+  const row = (title, list, sec) => list.length ? `<div class="pp-sec"><h4>${title}</h4><div class="pp-row">${list.map(x => clipPauseCard(x, sec)).join('')}</div></div>` : '';
+  box.innerHTML = `<div class="pp-inner">
+    <div class="pp-main">${c.a ? artistAvatar(c.a, c.k, 300).replace('class="av"', 'class="av pp-av"') : ''}
+      <div class="pp-info">
+        <small class="pp-kicker">${T('İzliyorsun')}</small>
+        <h2>${esc(c.t)}</h2>
+        <div class="pp-ep">${esc(clipArtist(c))}</div>
+        ${info.bio ? `<p class="pp-plot">${esc(info.bio)}</p>` : ''}
+        ${facts ? `<div class="pp-facts">${facts}</div>` : ''}
+      </div>
+    </div>
+    ${row(T('{a} klipleri', { a: esc(clipArtist(c)) }), same, 'pp_same')}
+    ${row(T(alikeTitle(c) ? 'Benzer Klipler' : 'Başka Klipler'), more, 'pp_more')}
+  </div>`;
+  box.dataset.for = key;
+  delete box.dataset.full;
+}
+const alikeTitle = c => !!(CL.artists[c.k]?.g && (CL.items || []).some(x => x.k !== c.k && CL.artists[x.k]?.g === CL.artists[c.k].g));
 
 // Plays clip i of a list, then the rest of the list in order.
 function playClips(list, i) {

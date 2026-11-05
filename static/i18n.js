@@ -18,6 +18,8 @@ const EN = {
   'Klip bulunamadı': 'No music videos found', 'Klip listesi alınamadı': 'Could not load the music videos',
   'Müzik klibi klasörleri': 'Music video folders', 'Bu klasörü müzik klibi klasörü olarak ekle': 'Add this folder as a music video folder',
   'Sonraki klip (N)': 'Next music video (N)', 'Sıradaki: {t}': 'Up next: {t}', 'Sanatçılar': 'Artists',
+  '{a} klipleri': 'More from {a}', 'Benzer Klipler': 'Similar Music Videos', 'Başka Klipler': 'More Music Videos', 'Albüm': 'Album',
+  'Yıl': 'Year', 'Tür': 'Genre',
 
   // navigation and page titles
   'Homeflix ana sayfa': 'Homeflix home', 'Ana Sayfa': 'Home', 'Filmler': 'Movies', 'Diziler': 'Series',
