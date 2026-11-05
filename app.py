@@ -33,7 +33,7 @@ def startup_jobs():
 def serve():
     from waitress import serve as waitress_serve
     print("\n=======================================================")
-    print("🍿 Homeflix 2 başlatıldı")
+    print("🍿 Lumbuz başlatıldı")
     print(f"📌 Bu bilgisayardan: http://127.0.0.1:{PORT}")
     for ip in lan_ips():
         print(f"🌐 Ev ağından:      http://{ip}:{PORT}")
@@ -61,7 +61,7 @@ def open_window(url):
     try:
         import webview
         api = WindowApi()
-        api.window = webview.create_window('Homeflix', url, width=1440, height=900, min_size=(960, 600),
+        api.window = webview.create_window('Lumbuz', url, width=1440, height=900, min_size=(960, 600),
                                            background_color='#0b0b0f', js_api=api)
         webview.start()
         return True

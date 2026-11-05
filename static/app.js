@@ -231,7 +231,7 @@ function heroHTML(picks) {
 }
 
 function heroContent(it) {
-  if (it.online) return `<div class="kicker"><b>H</b>Online · ${T(it.kind === 'os' ? 'Dizi' : 'Film')}</div>
+  if (it.online) return `<div class="kicker"><b>L</b>Online · ${T(it.kind === 'os' ? 'Dizi' : 'Film')}</div>
     <h1>${esc(it.t)}</h1>
     <div class="meta">${metaLine(it)}</div>
     <p class="plot">${esc(it.p)}</p>
@@ -243,7 +243,7 @@ function heroContent(it) {
   const kicker = it.kind === 's' ? T('Dizi') : col ? `${T('Koleksiyon')} · ${col.name}` : isNew(it) ? T('Yeni Eklendi') : T('Öne Çıkan Film');
   const prog = it.kind === 'm' ? movieProgress(it) : null;
   const resume = prog && !prog[2] && prog[0] > 30;
-  return `<div class="kicker"><b>H</b>${esc(kicker)}</div>
+  return `<div class="kicker"><b>L</b>${esc(kicker)}</div>
     <h1>${esc(it.t)}</h1>
     <div class="meta">${metaLine(it)}</div>
     <p class="plot">${esc(it.p)}</p>
@@ -660,10 +660,10 @@ function stCats() {
     ['subs', 'cc', 'Altyazı', 'Altyazının görünüşü ve kendiliğinden açılması.'],
     ['random', 'shuffle', 'Rastgele film', 'Rastgele film düğmesinin hangi filmlerden seçeceği.'],
     ST.s.local && ['downloads', 'download', 'İndirmeler', 'Kütüphane dosyaları indirilirken ağın ne kadarının kullanılacağı.'],
-    ['devices', 'wifi', 'Diğer cihazlar', 'Telefon, tablet ve TV’den Homeflix’e bağlanın.'],
+    ['devices', 'wifi', 'Diğer cihazlar', 'Telefon, tablet ve TV’den Lumbuz’a bağlanın.'],
     ['lang', 'lang', 'Dil · Language', 'Menülerin ve düğmelerin dili.'],
     ['keys', 'keyboard', 'Klavye kısayolları', 'Bilgisayarda klavyeyle hızlı kullanım.'],
-    ['about', 'info', 'Hakkında', 'Homeflix 2 ve bilgilerin geldiği yerler.'],
+    ['about', 'info', 'Hakkında', 'Lumbuz ve bilgilerin geldiği yerler.'],
   ].filter(Boolean);
 }
 async function openSettings() {
@@ -674,7 +674,7 @@ async function openSettings() {
   }
   const page = $('#settings-sheet');
   page.innerHTML = `<div class="st-wait"><div class="spin"></div></div>`;
-  try { ST.s = await api.get('/api/settings'); } catch { page.innerHTML = emptyState('Sunucuya ulaşılamıyor', 'Homeflix sunucusunun çalıştığından emin olun ve sayfayı yenileyin.'); return; }
+  try { ST.s = await api.get('/api/settings'); } catch { page.innerHTML = emptyState('Sunucuya ulaşılamıyor', 'Lumbuz sunucusunun çalıştığından emin olun ve sayfayı yenileyin.'); return; }
   const withBd = S.titles.filter(t => t.bd);
   const pick = withBd[Math.floor(Math.random() * withBd.length)];
   ST.bd = pick ? img('m', pick.bdId, 'backdrop', 1280) : '';
@@ -813,11 +813,11 @@ const ST_PANELS = {
     setTimeout(() => drawQR(urls[0]), 0);
     return `
     <div class="st-qr-box"><div class="st-qr" id="st-qr" aria-label="${T('QR kod')}: ${esc(urls[0])}"></div>
-      <div class="st-qr-text"><b>${T('Telefonun kamerasıyla okutun')}</b><small>${T('Homeflix açılır. Sonra tarayıcıda “Ana ekrana ekle” derseniz uygulama gibi kalır.')}</small>
+      <div class="st-qr-text"><b>${T('Telefonun kamerasıyla okutun')}</b><small>${T('Lumbuz açılır. Sonra tarayıcıda “Ana ekrana ekle” derseniz uygulama gibi kalır.')}</small>
         <span class="st-mono">${esc(urls[0])}</span></div></div>
     ${stGroup(T('Bu adreslerden biri'))}
     ${urls.map(u => stRow({ ic: 'globe', title: `<span class="st-mono">${esc(u)}</span>`, attrs: `data-copy="${esc(u)}" aria-label="${T('Kopyala')}: ${esc(u)}"`, end: icon('copy', 'st-end') })).join('')}
-    ${stHint(T('Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli. Homeflix TV uygulaması sunucuyu ağda kendisi bulur.'))}`;
+    ${stHint(T('Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli. Lumbuz TV uygulaması sunucuyu ağda kendisi bulur.'))}`;
   },
 
   lang: () => `
@@ -829,9 +829,9 @@ const ST_PANELS = {
     .map(([k, l]) => `<div class="st-tile st-key"><kbd>${k}</kbd><span>${l === 'Ses' ? T2('Ses', 'Volume') : T(l)}</span></div>`).join('')}</div>`,
 
   about: () => `
-    <div class="st-tiles">${stTile(T('Uygulama'), 'Homeflix 2')}${stTile(T('Lisans'), 'GPL-3.0')}${stTile(T('Film bilgileri'), 'TMDb · Emby · OMDb')}${stTile(T('Bu sunucu'), `<span class="st-mono">${esc(location.host)}</span>`)}</div>
-    <div class="st-tiles">${stTile(T('Sürüm'), `<span class="st-mono">${esc(ST.s.version || '')}</span>`)}${stTile(T('Depo'), `<span class="st-mono">kaptanoguz/Homeflix</span>`)}</div>
-    ${stHint(T("Homeflix 2 · Film bilgileri TMDb, Emby ve OMDb'den alınır."))}`,
+    <div class="st-tiles">${stTile(T('Uygulama'), 'Lumbuz')}${stTile(T('Lisans'), 'GPL-3.0')}${stTile(T('Film bilgileri'), 'TMDb · Emby · OMDb')}${stTile(T('Bu sunucu'), `<span class="st-mono">${esc(location.host)}</span>`)}</div>
+    <div class="st-tiles">${stTile(T('Sürüm'), `<span class="st-mono">${esc(ST.s.version || '')}</span>`)}${stTile(T('Depo'), `<span class="st-mono">kaptanoguz/Lumbuz</span>`)}</div>
+    ${stHint(T("Lumbuz · Film bilgileri TMDb, Emby ve OMDb'den alınır."))}`,
 };
 
 // Rows with data-st change a per-device setting (or the server's download limit) and redraw the panel in place.
@@ -1035,7 +1035,7 @@ async function play(kind, id, opts = {}) {
   $('#p-next').hidden = !P.next;
   $('#p-next').title = T(kind === 'v' ? 'Sonraki klip (N)' : 'Sonraki bölüm (N)');
   loadCredits(playingItem());
-  document.title = `${info.title} · Homeflix`;
+  document.title = `${info.title} · Lumbuz`;
   const start = opts.from !== undefined ? +opts.from : (info.resume > 30 ? info.resume : 0);
   P.mode = info.direct ? 'direct' : streamMode();
   loadSource(start);
@@ -1176,7 +1176,7 @@ function closePlayerNow() {
   $('#player').classList.remove('open', 'ui', 'idle', 'loading');
   $('#p-panel').classList.remove('open');
   $('#upnext').classList.remove('open');
-  document.title = 'Homeflix';
+  document.title = 'Lumbuz';
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   if (P.fsFallback && window.pywebview?.api) { window.pywebview.api.toggle_fullscreen(); P.fsFallback = false; }
   const openAfter = P.openAfter;
@@ -1208,7 +1208,7 @@ function mediaSession() {
   if (!('mediaSession' in navigator) || !P.info) return;
   const art = P.kind === 'v' ? `/img/clip/${P.id}` : P.kind === 'm' ? img('m', P.id, 'poster', 500) : img('s', P.info.sid, 'poster', 500);
   try {
-    navigator.mediaSession.metadata = new MediaMetadata({ title: P.info.title, artist: P.info.sub || 'Homeflix',
+    navigator.mediaSession.metadata = new MediaMetadata({ title: P.info.title, artist: P.info.sub || 'Lumbuz',
       artwork: [{ src: art, sizes: P.kind === 'v' ? '640x360' : '500x750', type: 'image/jpeg' }] });
     navigator.mediaSession.setActionHandler('play', () => mediaCommand('play'));
     navigator.mediaSession.setActionHandler('pause', () => mediaCommand('pause'));
@@ -1715,7 +1715,7 @@ async function renderClips() {
   const head = n => `<div class="page-head"><h1>${T('Müzik Klipleri')}</h1><span class="count">${n}</span></div>`;
   if (!CL.items) {
     if (CL.error) {
-      view.innerHTML = head('') + `<div class="grid">${emptyState('Klip listesi alınamadı', 'Homeflix sunucusuna ulaşılamıyor.', 'music')}</div>
+      view.innerHTML = head('') + `<div class="grid">${emptyState('Klip listesi alınamadı', 'Lumbuz sunucusuna ulaşılamıyor.', 'music')}</div>
         <div style="text-align:center;margin-top:-60px"><button class="btn btn-ghost" data-action="clips-retry">${icon('refresh')}${T('Tekrar Dene')}</button></div>`;
       return;
     }
@@ -1852,7 +1852,7 @@ function clipNext() {
 /* ================================================================ online (TMDb catalog, frameXTV player) */
 // Titles that aren't in the library: listed from TMDb, played in frameXTV's iframe player by TMDb id. Keys are
 // 'om:<tmdb>' (movie) and 'os:<tmdb>' (series); progress keys 'om:<tmdb>' and 'oe:<tmdb>:<season>:<episode>'.
-// Online images come through the Homeflix server, which keeps a copy, so devices without internet see them too.
+// Online images come through the Lumbuz server, which keeps a copy, so devices without internet see them too.
 const TMDB_IMG = '/img/tmdb/';
 const OL = { home: null, loading: false, error: false, items: new Map(), details: new Map(), q: '', searchT: 0, pageT: 0 };
 
@@ -2104,7 +2104,7 @@ async function playOnline(spec, opts = {}) {
   $('#o-title').textContent = info.t;
   $('#o-sub').textContent = sub;
   $('#o-next').hidden = !(kind === 's' && nextOnlineEpisode(info.seasons, s, e));
-  document.title = `${info.t} · Homeflix`;
+  document.title = `${info.t} · Lumbuz`;
   const params = new URLSearchParams({ autoplay: '1' });
   if (start > 0) params.set('t', String(Math.floor(start)));
   params.set('title', kind === 's' ? `${info.t} · ${sub}` : info.t);
@@ -2130,7 +2130,7 @@ function closeOnlineNow() {
   clearTimeout(OP.nextT);
   oFrame().src = 'about:blank';
   $('#oplayer').classList.remove('open');
-  document.title = 'Homeflix';
+  document.title = 'Lumbuz';
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   OL.details.delete(`${OP.kind}:${OP.tm}`);  // its progress changed
   setTimeout(async () => {
@@ -2226,7 +2226,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && OP.
 window.addEventListener('pagehide', () => { if (OP.open) saveOnline(true); });
 
 /* ================================================================ live TV (broadcasters' own free streams) */
-// Each device plays the broadcaster's stream directly; the Homeflix server only lists the channels, keeps their
+// Each device plays the broadcaster's stream directly; the Lumbuz server only lists the channels, keeps their
 // logos and checks every few hours which ones are on air. Apple devices and LG TVs play HLS natively; the others
 // use hls.js (loaded on first use), and fall back to the native player when a broadcaster blocks hls.js (CORS).
 const LV = { data: null, loading: false, error: false, cat: '', q: '', open: false, cur: null, prev: null, pcat: '',
@@ -2266,7 +2266,7 @@ async function renderLive() {
   const head = n => `<div class="page-head"><h1>${T('Canlı TV')}</h1><span class="count">${n}</span></div>`;
   if (!LV.data) {
     if (LV.error) {
-      view.innerHTML = head('') + `<div class="grid">${emptyState('Kanal listesi alınamadı', 'Homeflix sunucusuna ulaşılamıyor.', 'live')}</div>
+      view.innerHTML = head('') + `<div class="grid">${emptyState('Kanal listesi alınamadı', 'Lumbuz sunucusuna ulaşılamıyor.', 'live')}</div>
         <div style="text-align:center;margin-top:-60px"><button class="btn btn-ghost" data-action="live-retry">${icon('refresh')}${T('Tekrar Dene')}</button></div>`;
       return;
     }
@@ -2438,7 +2438,7 @@ function tuneLive(ch) {
   store.set('live_recent', [ch.id, ...store.get('live_recent', []).filter(x => x !== ch.id)].slice(0, 8));
   $('#l-title').textContent = ch.n;
   $('#l-sub').textContent = `${ch.no} · ${LIVE_CAT(ch.cat)} · ${ch.q}`;
-  document.title = `${ch.n} · ${T('Canlı TV')} · Homeflix`;
+  document.title = `${ch.n} · ${T('Canlı TV')} · Lumbuz`;
   $('#l-loading-logo').outerHTML = liveLogo(ch).replace('class="l-logo"', 'class="l-logo" id="l-loading-logo"');
   $('#l-loading').classList.remove('off');
   $('#l-error').hidden = true;
@@ -2460,7 +2460,7 @@ function tuneLive(ch) {
   // Ways to try, in order: each stream URL with hls.js (or natively), then natively when hls.js was refused.
   const urls = [ch.url, ...(ch.alt || [])];
   const tries = [];
-  // Some broadcasters send their playlists without a CORS header, which hls.js needs: the Homeflix server then
+  // Some broadcasters send their playlists without a CORS header, which hls.js needs: the Lumbuz server then
   // passes just the playlist text through (/api/live/pl); the video still comes straight from the broadcaster.
   const proxied = u => `/api/live/pl/${encodeURIComponent(ch.id)}?u=${encodeURIComponent(u)}`;
   urls.forEach(u => {
@@ -2578,7 +2578,7 @@ function closeLiveNow() {
   LV.seq++;
   stopLiveMedia();
   $('#lplayer').classList.remove('open', 'listing', 'ui');
-  document.title = 'Homeflix';
+  document.title = 'Lumbuz';
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   if (S.view === 'live') softRender();
 }
@@ -2772,7 +2772,7 @@ async function boot() {
   $('#view').innerHTML = `<div style="height:100vh;display:grid;place-items:center"><div class="spin" style="width:40px;height:40px;border-width:3px"></div></div>`;
   await migrateV1();
   try { await Promise.all([loadLibrary(), loadUser()]); }
-  catch { $('#view').innerHTML = emptyState('Sunucuya ulaşılamıyor', 'Homeflix sunucusunun çalıştığından emin olun ve sayfayı yenileyin.'); return; }
+  catch { $('#view').innerHTML = emptyState('Sunucuya ulaşılamıyor', 'Lumbuz sunucusunun çalıştığından emin olun ve sayfayı yenileyin.'); return; }
   route();
   pollStatus(true);
 }

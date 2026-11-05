@@ -14,12 +14,12 @@ import time
 import requests
 
 from . import state
-from .config import CACHE_DIR, USER_AGENT, _secrets
+from .config import CACHE_DIR, USER_AGENT, _secrets, env
 from .db import session
 from .names import fold
 
 DEEZER = 'https://api.deezer.com'
-AUDIODB_KEY = os.environ.get('HOMEFLIX_AUDIODB_KEY') or _secrets.get('audiodb_key') or '123'
+AUDIODB_KEY = env('AUDIODB_KEY') or _secrets.get('audiodb_key') or '123'
 AUDIODB = f'https://www.theaudiodb.com/api/v1/json/{AUDIODB_KEY}'
 ART_DIR = os.path.join(CACHE_DIR, 'clip_art')
 os.makedirs(ART_DIR, exist_ok=True)

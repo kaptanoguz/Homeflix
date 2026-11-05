@@ -16,7 +16,7 @@
         android:banner="@drawable/banner"
         android:hardwareAccelerated="true"
         android:icon="@drawable/ic_launcher"
-        android:label="Homeflix"
+        android:label="Lumbuz"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 

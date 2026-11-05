@@ -178,7 +178,7 @@ main { min-height: 100vh; }
   background: radial-gradient(120% 90% at 0% 0%, hsl(var(--h) 55% 32%), hsl(var(--h) 45% 12%) 70%);
   color: rgba(255,255,255,.92); letter-spacing: -.01em; word-break: break-word;
 }
-.ph::before { content: "HOMEFLIX"; position: absolute; top: 14px; left: 16px; font-size: 10px; letter-spacing: .2em; color: rgba(255,255,255,.45); font-weight: 800; }
+.ph::before { content: "LUMBUZ"; position: absolute; top: 14px; left: 16px; font-size: 10px; letter-spacing: .2em; color: rgba(255,255,255,.45); font-weight: 800; }
 
 .card.land .art { aspect-ratio: 16 / 9; }
 .card.land .shade { opacity: 1; background: linear-gradient(0deg, rgba(0,0,0,.9), rgba(0,0,0,.1) 55%, transparent); padding: 14px 16px 18px; }

@@ -22,7 +22,7 @@ const EN = {
   'Yıl': 'Year', 'Tür': 'Genre',
 
   // navigation and page titles
-  'Homeflix ana sayfa': 'Homeflix home', 'Ana Sayfa': 'Home', 'Filmler': 'Movies', 'Diziler': 'Series',
+  'Lumbuz ana sayfa': 'Lumbuz home', 'Ana Sayfa': 'Home', 'Filmler': 'Movies', 'Diziler': 'Series',
   'Koleksiyonlar': 'Collections', 'Canlı TV': 'Live TV', 'Canlı': 'Live', 'Listem': 'My List', 'Ayarlar': 'Settings',
   'Ara': 'Search', 'Ara ( / )': 'Search ( / )', 'Rastgele film': 'Random movie', 'Kapat': 'Close', 'Geri': 'Back',
   'İleri': 'Forward', 'Tümü': 'All', 'Tümünü gör': 'See all', 'Sırala': 'Sort', 'Online': 'Online',
@@ -83,7 +83,7 @@ const EN = {
   'Klavye kısayolları': 'Keyboard shortcuts', 'Boşluk': 'Space', 'Oynat / Duraklat': 'Play / Pause',
   '10 sn geri / ileri': '10 s back / forward', 'Ses': 'Volume', 'Tam ekran': 'Full screen', 'Sessiz': 'Mute',
   'Ses ve altyazı': 'Audio and subtitles', 'Sonraki bölüm': 'Next episode',
-  "Homeflix 2 · Film bilgileri TMDb, Emby ve OMDb'den alınır.": 'Homeflix 2 · Movie details come from TMDb, Emby and OMDb.',
+  "Lumbuz · Film bilgileri TMDb, Emby ve OMDb'den alınır.": 'Lumbuz · Movie details come from TMDb, Emby and OMDb.',
   'Dil': 'Language',
   'Menüler ve düğmeler bu dilde görünür. Film adları ve özetleri TMDb’den geldiği gibi kalır.':
     'Menus and buttons use this language. Titles and plots stay as they come from TMDb.',
@@ -97,10 +97,10 @@ const EN = {
   'Altyazının görünüşü ve kendiliğinden açılması.': 'How subtitles look and when they turn on by themselves.',
   'Rastgele film düğmesinin hangi filmlerden seçeceği.': 'Which movies the random movie button picks from.',
   'Kütüphane dosyaları indirilirken ağın ne kadarının kullanılacağı.': 'How much of the network downloads of library files may use.',
-  'Telefon, tablet ve TV’den Homeflix’e bağlanın.': 'Connect to Homeflix from a phone, tablet or TV.',
+  'Telefon, tablet ve TV’den Lumbuz’a bağlanın.': 'Connect to Lumbuz from a phone, tablet or TV.',
   'Menülerin ve düğmelerin dili.': 'The language of menus and buttons.',
   'Bilgisayarda klavyeyle hızlı kullanım.': 'Quick keyboard use on a computer.',
-  'Homeflix 2 ve bilgilerin geldiği yerler.': 'Homeflix 2 and where its details come from.',
+  'Lumbuz ve bilgilerin geldiği yerler.': 'Lumbuz and where its details come from.',
   'Film klasörleri': 'Movie folders', 'Dizi klasörleri': 'Series folders', 'Klasör ekle': 'Add folder',
   'Henüz klasör eklenmedi.': 'No folders added yet.', 'Bir disk veya klasör seçin': 'Choose a drive or folder',
   'Bu klasörü film klasörü olarak ekle': 'Add this folder as a movie folder',
@@ -124,9 +124,9 @@ const EN = {
   'Bu adreslerden biri': 'One of these addresses', 'Uygulama': 'App', 'Lisans': 'License', 'Film bilgileri': 'Movie details',
   'Bu sunucu': 'This server',
   'QR kod': 'QR code', 'Telefonun kamerasıyla okutun': 'Scan it with your phone camera',
-  'Homeflix açılır. Sonra tarayıcıda “Ana ekrana ekle” derseniz uygulama gibi kalır.': 'Homeflix opens. Choose “Add to Home screen” in the browser to keep it like an app.',
-  'Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli. Homeflix TV uygulaması sunucuyu ağda kendisi bulur.':
-    'Open this address in a phone, tablet or TV browser on the same Wi-Fi. The Homeflix TV app finds the server on the network by itself.',
+  'Lumbuz açılır. Sonra tarayıcıda “Ana ekrana ekle” derseniz uygulama gibi kalır.': 'Lumbuz opens. Choose “Add to Home screen” in the browser to keep it like an app.',
+  'Telefon, tablet veya TV tarayıcısından bu adrese girin. Aynı Wi-Fi ağında olmanız yeterli. Lumbuz TV uygulaması sunucuyu ağda kendisi bulur.':
+    'Open this address in a phone, tablet or TV browser on the same Wi-Fi. The Lumbuz TV app finds the server on the network by itself.',
   'Hepsi': 'Any', 'En düşük puan': 'Minimum rating',
   'Ayarlar kaydedildi, tarama başladı': 'Settings saved, scan started', 'Diskteki dosyalar taranıyor…': 'Scanning files on disk…',
   'Eksik bilgiler yeniden aranıyor': 'Looking up missing details again',
@@ -181,7 +181,7 @@ const EN = {
 
   // live TV
   'Türkiye': 'Turkey only', 'İZLENİYOR': 'WATCHING', 'CANLI': 'LIVE', 'Kanal listesi alınamadı': 'Could not load the channel list',
-  'Homeflix sunucusuna ulaşılamıyor.': 'Cannot reach the Homeflix server.', '{n} kanal': '{n} channel|{n} channels',
+  'Lumbuz sunucusuna ulaşılamıyor.': 'Cannot reach the Lumbuz server.', '{n} kanal': '{n} channel|{n} channels',
   'Kanal ara…': 'Search channels…', 'Son İzlediklerin': 'Recently Watched', 'Tüm Kanallar': 'All Channels',
   'Kanal bulunamadı': 'No channels found', 'Başka bir kategori ya da arama deneyin.': 'Try another category or search.',
   'Başka bir arama deneyin.': 'Try another search.', 'Kanal bulunamadı.': 'Channel not found.',
@@ -194,7 +194,7 @@ const EN = {
   'Rastgele film ayarlarına uyan film yok. Ayarlar’dan seçimleri genişletin.': 'No movie matches the random movie settings. Widen them in Settings.',
   'Kütüphanede film yok.': 'There are no movies in the library.', 'Rastgele seçildi: <b>{t}</b>': 'Random pick: <b>{t}</b>',
   'Adres kopyalandı': 'Address copied', 'Sunucuya ulaşılamıyor': 'Cannot reach the server',
-  'Homeflix sunucusunun çalıştığından emin olun ve sayfayı yenileyin.': 'Make sure the Homeflix server is running and reload the page.',
+  'Lumbuz sunucusunun çalıştığından emin olun ve sayfayı yenileyin.': 'Make sure the Lumbuz server is running and reload the page.',
 
   // genres (TMDb's Turkish names, also the library's)
   'Aksiyon': 'Action', 'Macera': 'Adventure', 'Animasyon': 'Animation', 'Komedi': 'Comedy', 'Suç': 'Crime', 'Dram': 'Drama',
