@@ -406,11 +406,16 @@ function renderList() {
 
 function route() {
   const [view, arg] = (location.hash.slice(1) || 'home').split('/');
-  S.view = ['home', 'movies', 'series', 'collections', 'kids', 'list', 'online', 'live'].includes(view) ? view : 'home';
+  S.view = ['home', 'movies', 'series', 'collections', 'kids', 'list', 'online', 'live', 'clips'].includes(view) ? view : 'home';
   if ((S.view === 'movies' || S.view === 'series')) S.browse[S.view].genre = arg ? decodeURIComponent(arg) : '';
   $$('[data-tab]').forEach(t => t.classList.toggle('active', t.dataset.tab === S.view));
   render();
   window.scrollTo(0, 0);
+  // Cover frames are made in the background after a scan: the list is fetched again so new ones show up.
+  if (S.view === 'clips' && CL.items) {
+    const before = CL.items.map(c => c.id + ':' + c.th).join();
+    loadClips().then(() => { if (S.view === 'clips' && !P.open && CL.items.map(c => c.id + ':' + c.th).join() !== before) softRender(); });
+  }
 }
 
 function render() {
@@ -418,7 +423,7 @@ function render() {
   clearInterval(heroTimer);
   const y = window.scrollY;
   ({ home: renderHome, movies: () => renderBrowse('movies'), series: () => renderBrowse('series'),
-     collections: renderCollections, kids: renderKids, list: renderList, online: renderOnline, live: renderLive })[S.view]();
+     collections: renderCollections, kids: renderKids, list: renderList, online: renderOnline, live: renderLive, clips: renderClips })[S.view]();
   return y;
 }
 function softRender() { const y = window.scrollY; render(); window.scrollTo(0, y); }
@@ -712,7 +717,8 @@ const stHint = text => `<p class="st-hint">${text}</p>`;
 
 // Library folders, picked like in Plex: "Add folder" opens a folder browser in the panel; the folder chosen there is
 // saved to the list and scanned straight away. A row in the list takes its folder out of the library.
-const DIR_LABELS = { movie: ['Film klasörleri', 'Bu klasörü film klasörü olarak ekle'], series: ['Dizi klasörleri', 'Bu klasörü dizi klasörü olarak ekle'] };
+const DIR_LABELS = { movie: ['Film klasörleri', 'Bu klasörü film klasörü olarak ekle'], series: ['Dizi klasörleri', 'Bu klasörü dizi klasörü olarak ekle'],
+  music: ['Müzik klibi klasörleri', 'Bu klasörü müzik klibi klasörü olarak ekle'] };
 const stDirs = (s, kind) => `${stGroup(T(DIR_LABELS[kind][0]))}
   ${s[`${kind}_dirs`].map((d, i) => stRow({ ic: 'folder', title: `<span class="st-mono">${esc(d)}</span>`, attrs: `data-dir-rm="${kind}:${i}" aria-label="${T('Kaldır')}: ${esc(d)}"`, end: icon('x', 'st-end') })).join('')}
   ${stRow({ ic: 'plus', title: T('Klasör ekle'), sub: s[`${kind}_dirs`].length ? '' : T('Henüz klasör eklenmedi.'), attrs: `data-dir-add="${kind}"`, end: icon('right', 'st-end') })}`;
@@ -763,7 +769,7 @@ const SUB_SIZES = [['s', 'Küçük'], ['m', 'Orta'], ['l', 'Büyük']];
 const ST_PANELS = {
   library: s => `
     <div class="st-tiles four">${stTile(T2('Film', 'Movies'), s.stats.movies)}${stTile(T2('Dizi', 'Series'), s.stats.series)}${stTile(T2('Bölüm', 'Episodes'), s.stats.episodes)}${stTile(T2('Koleksiyon', 'Collections'), S.cols.length)}</div>
-    ${s.local ? `${stDirs(s, 'movie')}${stDirs(s, 'series')}
+    ${s.local ? `${stDirs(s, 'movie')}${stDirs(s, 'series')}${stDirs(s, 'music')}
       ${stGroup(T('OMDb'))}
       <label class="st-field"><small>${T('OMDb API anahtarı')}</small><input id="conf-key" value="${esc(s.omdb_api_key)}" spellcheck="false"></label>
       ${stRow({ ic: 'check', title: T('Kaydet ve Tara'), sub: T('Anahtarı kaydeder ve kütüphaneyi baştan tarar.'), attrs: 'data-action="save-settings"', end: icon('right', 'st-end') })}` : ''}
@@ -976,7 +982,7 @@ async function pollStatus(now) {
   pollTimer = setTimeout(pollStatus, wasBusy ? 4000 : 30000);
 }
 async function refresh() {
-  await Promise.all([loadLibrary(), loadUser()]);
+  await Promise.all([loadLibrary(), loadUser(), CL.items ? loadClips() : null]);
   if (!P.open) softRender();
 }
 
@@ -1022,10 +1028,11 @@ async function play(kind, id, opts = {}) {
   try { info = await api.get(`/api/media/${kind}/${id}`); } catch { toast(T('Video dosyası bulunamadı. Disk bağlı mı?')); return back(); }
   if (P.kind !== kind || P.id !== id) return;
   P.info = info;
-  P.next = info.next || null;
+  P.next = kind === 'v' ? clipNext() : info.next || null;
   $('#p-title').textContent = info.title;
   $('#p-sub').textContent = tx(info.sub || '');
   $('#p-next').hidden = !P.next;
+  $('#p-next').title = T(kind === 'v' ? 'Sonraki klip (N)' : 'Sonraki bölüm (N)');
   loadCredits(playingItem());
   document.title = `${info.title} · Homeflix`;
   const start = opts.from !== undefined ? +opts.from : (info.resume > 30 ? info.resume : 0);
@@ -1136,13 +1143,13 @@ function tick() {
   for (let i = 0; i < v.buffered.length; i++) if (v.buffered.start(i) <= v.currentTime + 1) bufEnd = Math.max(bufEnd, v.buffered.end(i));
   $('#p-buf').style.width = d ? clamp((P.offset + bufEnd) / d * 100, 0, 100) + '%' : '0';
   renderSubtitle(t);
-  if (P.next && d && !P.upnextDismissed && d - t < 30 && d - t > 0 && !v.paused) showUpNext();
+  if (P.next && P.kind !== 'v' && d && !P.upnextDismissed && d - t < 30 && d - t > 0 && !v.paused) showUpNext();
   if (!v.paused && Date.now() - P.lastSave > 10000) savePosition();
   P.raf = requestAnimationFrame(tick);
 }
 
 function savePosition(beacon = false) {
-  if (!P.info) return;
+  if (!P.info || P.kind === 'v') return;
   const t = pTime(), d = pDur();
   if (t < 5 || !d) return;
   P.lastSave = Date.now();
@@ -1198,9 +1205,10 @@ document.addEventListener('fullscreenchange', () => { $('#p-fsicon').setAttribut
 
 function mediaSession() {
   if (!('mediaSession' in navigator) || !P.info) return;
-  const art = P.kind === 'm' ? img('m', P.id, 'poster', 500) : img('s', P.info.sid, 'poster', 500);
+  const art = P.kind === 'v' ? `/img/clip/${P.id}` : P.kind === 'm' ? img('m', P.id, 'poster', 500) : img('s', P.info.sid, 'poster', 500);
   try {
-    navigator.mediaSession.metadata = new MediaMetadata({ title: P.info.title, artist: P.info.sub || 'Homeflix', artwork: [{ src: art, sizes: '500x750', type: 'image/jpeg' }] });
+    navigator.mediaSession.metadata = new MediaMetadata({ title: P.info.title, artist: P.info.sub || 'Homeflix',
+      artwork: [{ src: art, sizes: P.kind === 'v' ? '640x360' : '500x750', type: 'image/jpeg' }] });
     navigator.mediaSession.setActionHandler('play', () => mediaCommand('play'));
     navigator.mediaSession.setActionHandler('pause', () => mediaCommand('pause'));
     navigator.mediaSession.setActionHandler('seekbackward', () => mediaCommand('back'));
@@ -1211,6 +1219,7 @@ function mediaSession() {
 
 function playNext() {
   if (!P.next) return;
+  if (P.kind === 'v') { toast(T('Sıradaki: {t}', { t: esc(`${P.next.label} – ${P.next.name}`) }), 1800); return play('v', P.next.id, { from: 0, title: P.next.name }); }
   savePosition();
   api.post('/api/progress', { key: `${P.kind}:${P.id}`, position: pDur(), duration: pDur() }).catch(() => {});
   play('e', P.next.id, { from: 0 });
@@ -1384,7 +1393,7 @@ async function loadServerSub(url, label, source) {
 }
 function autoSubtitles() {
   const info = P.info;
-  if (!info || store.get('subsOff', false)) return;
+  if (!info || P.kind === 'v' || store.get('subsOff', false)) return;
   const k = P.kind, id = P.id;
   if (info.local_subs.length) return loadServerSub(`/sub/${k}/${id}/local/0`, info.local_subs[0].label, 'local:0');
   const turkishAudio = info.audio.some(a => ['tur', 'tr'].includes(a.lang));
@@ -1525,6 +1534,7 @@ function wirePlayer() {
     savePosition();
     if (P.next && !P.upnextDismissed) playNext();
     else if (P.mode !== 'direct' && pDur() - pTime() > 20) loadSource(pTime());
+    else if (P.kind === 'v') pl.classList.add('ui');
     else { pl.classList.add('ui'); api.post('/api/progress', { key: `${P.kind}:${P.id}`, position: pDur(), duration: pDur() }).catch(() => {}); }
   });
   v.addEventListener('error', () => {
@@ -1622,6 +1632,117 @@ function playerKeys(e) {
   };
   if (/^[0-9]$/.test(k)) { seek(pDur() * (+k) / 10); showUI(); e.preventDefault(); return; }
   if (map[k]) { e.preventDefault(); map[k](); showUI(); }
+}
+
+/* ================================================================ music videos */
+// Clips from the music video folders (Settings › Library), named "Artist - Song.mp4". A clip plays in the normal player
+// and the list it was started from carries on by itself, like a playlist (the last one wraps to the first). Clips
+// have no Continue Watching entry and no subtitles.
+const CL = { items: null, byId: new Map(), error: false, q: '', sort: store.get('clip_sort', 'artist'), lists: {} };
+const CLIP_SORTS = [['artist', 'Sanatçı (A–Z)'], ['added', 'Yeni eklenen'], ['title', 'Şarkı (A–Z)']];
+
+async function loadClips() {
+  try {
+    const r = await api.get('/api/clips');
+    CL.items = r.clips.map(c => ({ ...c, search: fold(`${c.a} ${c.t}`) }));
+    CL.byId = new Map(CL.items.map(c => [c.id, c]));
+    CL.error = false;
+  } catch { CL.error = !CL.items; }
+}
+const clipArtist = c => c.a || T('Bilinmeyen sanatçı');
+function sortClips(items, sort) {
+  const by = { artist: (a, b) => collator.compare(a.a, b.a) || collator.compare(a.t, b.t), title: (a, b) => collator.compare(a.t, b.t),
+    added: (a, b) => b.add - a.add }[sort] || (() => 0);
+  return items.slice().sort(by);
+}
+function clipCard(c, list, i) {
+  return `<div class="card land clip" tabindex="0" role="button" data-clip="${list}:${i}" aria-label="${esc(`${clipArtist(c)} – ${c.t}`)}">
+    <div class="art"><div class="ph" style="--h:${hue(c.a || c.t)}">${esc(c.a || c.t)}</div>
+      ${c.th >= 0 ? `<img src="/img/clip/${c.id}?w=480&v=${c.th}" alt="" loading="lazy" decoding="async" onload="this.classList.add('ok')" onerror="this.remove()">` : ''}
+      ${c.d ? `<span class="dur">${fmtTime(c.d)}</span>` : ''}
+      <div class="play-glyph">${icon('play', 'fill')}</div>
+      <div class="shade"><strong>${esc(c.t)}</strong><span>${esc(clipArtist(c))}</span></div>
+    </div></div>`;
+}
+function clipRow(title, items, list) {
+  if (!items.length) return '';
+  CL.lists[list] = items;
+  return `<section class="row">
+    <div class="row-head"><h2>${esc(title)}</h2></div>
+    <div class="rail-wrap">
+      <button class="rail-btn prev" aria-label="${T('Geri')}" hidden>${icon('left')}</button>
+      <div class="rail wide">${items.map((c, i) => clipCard(c, list, i)).join('')}</div>
+      <button class="rail-btn next" aria-label="${T('İleri')}">${icon('right')}</button>
+    </div></section>`;
+}
+function clipGrid() {
+  const q = fold(CL.q.trim());
+  const items = sortClips(q ? CL.items.filter(c => c.search.includes(q)) : CL.items, CL.sort);
+  CL.lists.all = items;
+  return items.map((c, i) => clipCard(c, 'all', i)).join('') || emptyState('Klip bulunamadı', 'Başka bir arama deneyin.', 'music');
+}
+
+async function renderClips() {
+  const view = $('#view');
+  const head = n => `<div class="page-head"><h1>${T('Müzik Klipleri')}</h1><span class="count">${n}</span></div>`;
+  if (!CL.items) {
+    if (CL.error) {
+      view.innerHTML = head('') + `<div class="grid">${emptyState('Klip listesi alınamadı', 'Homeflix sunucusuna ulaşılamıyor.', 'music')}</div>
+        <div style="text-align:center;margin-top:-60px"><button class="btn btn-ghost" data-action="clips-retry">${icon('refresh')}${T('Tekrar Dene')}</button></div>`;
+      return;
+    }
+    view.innerHTML = head('') + `<div style="height:50vh;display:grid;place-items:center"><div class="spin" style="width:40px;height:40px;border-width:3px"></div></div>`;
+    await loadClips();
+    if (S.view === 'clips') renderClips();
+    return;
+  }
+  const all = CL.items;
+  if (!all.length) {
+    view.innerHTML = head('') + `<div class="grid">${emptyState('Henüz klip yok', 'Ayarlar › Kütüphane bölümünden müzik klibi klasörü ekleyin.', 'music')}</div>`;
+    return;
+  }
+  const artists = new Map();
+  all.forEach(c => { if (c.a) artists.set(c.a, [...(artists.get(c.a) || []), c]); });
+  CL.lists = {};
+  let html = head(`${T('{n} klip', { n: all.length })} · ${T('{n} sanatçı', { n: artists.size })}`) + `
+    <div class="lv-tools cl-tools">
+      <button class="btn btn-play" data-action="clips-shuffle">${icon('shuffle')}${T('Karışık Çal')}</button>
+      <div class="chips" id="cl-sort">${CLIP_SORTS.map(([v, l]) => `<button class="chip${CL.sort === v ? ' on' : ''}" data-csort="${v}">${T(l)}</button>`).join('')}</div>
+      <label class="o-search-box">${icon('search')}<input id="clip-q" type="search" placeholder="${T('Sanatçı veya şarkı ara…')}" autocomplete="off" spellcheck="false" value="${esc(CL.q)}"></label>
+    </div>`;
+  if (!CL.q.trim()) {
+    html += '<div class="rows cl-rows">' + clipRow(T('Son Eklenenler'), sortClips(all, 'added').slice(0, 20), 'new');
+    [...artists.entries()].filter(([, v]) => v.length >= 3).sort((a, b) => b[1].length - a[1].length || collator.compare(a[0], b[0]))
+      .slice(0, 8).forEach(([a, v], i) => { html += clipRow(a, sortClips(v, 'title'), 'a' + i); });
+    html += `</div><h2 class="lv-sec">${T('Tüm Klipler')}</h2>`;
+  }
+  view.innerHTML = html + `<div class="grid clips" id="cl-grid">${clipGrid()}</div>`;
+  wireRails(view);
+  const inp = $('#clip-q');
+  let t = 0;
+  inp.addEventListener('input', () => {
+    const had = !!CL.q.trim();
+    CL.q = inp.value;
+    clearTimeout(t);
+    t = setTimeout(() => {
+      if (had !== !!CL.q.trim()) { renderClips(); const i = $('#clip-q'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+      else $('#cl-grid').innerHTML = clipGrid();
+    }, 120);
+  });
+}
+
+// Plays clip i of a list, then the rest of the list in order.
+function playClips(list, i) {
+  if (!list?.length) return;
+  P.queue = list.map(c => c.id);
+  const c = list[i] || list[0];
+  play('v', c.id, { title: c.t, from: 0 });
+}
+function clipNext() {
+  const q = P.queue || [];
+  if (q.length < 2) return null;
+  const c = CL.byId.get(q[(q.indexOf(P.id) + 1) % q.length]);
+  return c ? { id: c.id, label: clipArtist(c), name: c.t } : null;
 }
 
 /* ================================================================ online (TMDb catalog, frameXTV player) */
@@ -2430,6 +2551,15 @@ document.addEventListener('click', async e => {
   if (lv) return openLive(lv.dataset.live);
   const lc = t.closest('[data-lcat]');
   if (lc) { LV.cat = lc.dataset.lcat; return renderLive(); }
+  const clip = t.closest('[data-clip]');
+  if (clip) { const [list, i] = clip.dataset.clip.split(':'); return playClips(CL.lists[list], +i); }
+  const cs = t.closest('[data-csort]');
+  if (cs) {
+    CL.sort = cs.dataset.csort; store.set('clip_sort', CL.sort);
+    $$('#cl-sort .chip').forEach(b => b.classList.toggle('on', b === cs));
+    $('#cl-grid').innerHTML = clipGrid();
+    return;
+  }
   const forget = t.closest('[data-forget]');
   if (forget) {
     e.stopPropagation();
@@ -2488,6 +2618,8 @@ document.addEventListener('click', async e => {
     if (a === 'kids-surprise') return kidsSurprise();
     if (a === 'online-retry') { OL.error = false; return renderOnline(); }
     if (a === 'live-retry') { LV.error = false; return renderLive(); }
+    if (a === 'clips-retry') { CL.error = false; return renderClips(); }
+    if (a === 'clips-shuffle') return playClips(shuffle(CL.items || []), 0);
     return settingsAction(a);
   }
   if (t.hasAttribute('data-dismiss')) back();
@@ -2500,7 +2632,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && stack.length) { e.preventDefault(); return back(); }
   if (typing) return;
   if (e.key === '/' || (e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); return openSearch(); }
-  if ((e.key === 'Enter' || e.key === ' ') && document.activeElement?.matches('[data-open], [data-play], [data-oplay], [data-live]')) {
+  if ((e.key === 'Enter' || e.key === ' ') && document.activeElement?.matches('[data-open], [data-play], [data-oplay], [data-live], [data-clip]')) {
     e.preventDefault(); document.activeElement.click();
   }
 });

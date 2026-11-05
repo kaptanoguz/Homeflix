@@ -3,7 +3,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
-from .config import DB_FILE, DEFAULT_MOVIE_DIRS, DEFAULT_SERIES_DIRS, OMDB_KEYS
+from .config import DB_FILE, DEFAULT_MOVIE_DIRS, DEFAULT_MUSIC_DIRS, DEFAULT_SERIES_DIRS, OMDB_KEYS
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT);
@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS season_fetch (series_id INTEGER, season INTEGER, fetc
 -- Titles seen in the Online tab (TMDb data), so Continue Watching and My List can show them without TMDb.
 CREATE TABLE IF NOT EXISTS online_titles (kind TEXT NOT NULL, tmdb_id INTEGER NOT NULL, data TEXT, updated_at REAL,
     PRIMARY KEY (kind, tmdb_id));
+-- Music videos (the Music Videos tab). thumb: 0 = cover frame not made yet, 1 = ready, -1 = ffmpeg failed.
+CREATE TABLE IF NOT EXISTS music_videos (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT UNIQUE NOT NULL, artist TEXT,
+    title TEXT, added_at REAL, size INTEGER, duration REAL, thumb INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_episodes_series ON episodes(series_id, season, episode);
 """
 
@@ -126,12 +129,16 @@ def load_settings():
         conf = {r["key"]: r["value"] for r in c.execute("SELECT key, value FROM config")}
     conf.setdefault("movie_dir", _first_existing(DEFAULT_MOVIE_DIRS))
     conf.setdefault("series_dir", _first_existing(DEFAULT_SERIES_DIRS))
+    if "music_dirs" not in conf:
+        music = next((p for p in DEFAULT_MUSIC_DIRS if os.path.isdir(p)), None)
+        conf["music_dirs"] = json.dumps([music] if music else [], ensure_ascii=False)
     conf.setdefault("omdb_api_key", OMDB_KEYS[0] if OMDB_KEYS else "")
     return conf
 
 
 def library_dirs(settings, kind):
-    """The movie or series folders ('movie' / 'series'). Older installs kept a single folder in movie_dir / series_dir."""
+    """The movie, series or music video folders ('movie' / 'series' / 'music'). Older installs kept a single folder in
+    movie_dir / series_dir."""
     raw = settings.get(f"{kind}_dirs")
     if raw is None:
         return [settings[f"{kind}_dir"]] if settings.get(f"{kind}_dir") else []

@@ -7,7 +7,7 @@ import time
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 
-from . import state
+from . import clips, state
 from .config import IMG_EXTS, POSTERS_DIR, VIDEO_EXTS
 from .db import library_dirs, session
 from .names import (EXTRA_BASE, VTS_RE, clean_display_title, clean_series_name, parse_season_episode, smart_title)
@@ -51,6 +51,7 @@ def scan_library(settings):
         state.clear_task('scan')
         scan_lock.release()
     sync_emby(settings)
+    clips.scan(settings)
     state.wake_enricher()
 
 

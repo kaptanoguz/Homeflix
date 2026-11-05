@@ -60,3 +60,5 @@ DEFAULT_MOVIE_DIRS = ["/media/oguz/BackupPlus/Film", "/media/oguz/BackupPlus/Mov
                       os.path.expanduser("~/Videos/Film"), os.path.expanduser("~/Videos/Movies")]
 DEFAULT_SERIES_DIRS = ["/media/oguz/BackupPlus/dizi", "/media/oguz/BackupPlus/Diziler",
                        os.path.expanduser("~/Videos/dizi"), os.path.expanduser("~/Videos/Diziler")]
+DEFAULT_MUSIC_DIRS = ["/media/oguz/BackupPlus/Müzik/Klip", os.path.expanduser("~/Videos/Klip"),
+                      os.path.expanduser("~/Videos/Music Videos"), os.path.expanduser("~/Music/Klip")]

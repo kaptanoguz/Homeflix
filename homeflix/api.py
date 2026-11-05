@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from flask import Flask, Response, abort, g, jsonify, render_template, request, send_file
 
-from . import downloads, library, livetv, media, metadata, online, state, subtitles
+from . import clips, downloads, library, livetv, media, metadata, online, state, subtitles
 from .config import BASE_DIR, ONLINE_EMBED, POSTERS_DIR
 from .db import LOCAL_VIEWER, library_dirs, load_settings, save_settings, session
 from .names import EXTRA_BASE, extra_title, fold, sequel_key
@@ -526,7 +526,7 @@ def api_migrate():
 # ---------------------------------------------------------------- playback
 
 def media_path(kind, iid):
-    table = {'m': 'movies', 'e': 'episodes'}.get(kind)
+    table = {'m': 'movies', 'e': 'episodes', 'v': 'music_videos'}.get(kind)
     if not table:
         abort(404)
     with session() as c:
@@ -549,7 +549,10 @@ def api_media(kind, iid):
     with session() as c:
         p = c.execute("SELECT * FROM progress WHERE viewer = ? AND key = ?", (viewer(), f"{kind}:{iid}")).fetchone()
         out['resume'] = p['position'] if p and not p['finished'] else 0
-        if kind == 'm':
+        if kind == 'v':
+            v = c.execute("SELECT artist, title FROM music_videos WHERE id = ?", (iid,)).fetchone()
+            out.update(title=v['title'], sub=v['artist'] or '', resume=0)
+        elif kind == 'm':
             m = c.execute("SELECT title, year, title_en FROM movies WHERE id = ?", (iid,)).fetchone()
             out.update(title=(m['title_en'] if en else '') or m['title'], sub=m['year'] or '')
         else:
@@ -578,6 +581,8 @@ def play(kind, iid):
 def _download_name(kind, iid, path):
     """A readable file name for the saved copy: "Title (Year).mkv" or "Series S01E02.mkv"."""
     ext = os.path.splitext(path)[1].lower()
+    if kind == 'v':
+        return os.path.basename(path)
     with session() as c:
         if kind == 'm':
             r = c.execute("SELECT title, year FROM movies WHERE id = ?", (iid,)).fetchone()
@@ -711,6 +716,8 @@ def subs_search(kind, iid):
 @app.route('/sub/<kind>/<int:iid>/auto')
 def sub_auto(kind, iid):
     path = media_path(kind, iid)
+    if kind == 'v':
+        return '', 204
     query, ids = sub_lookup(kind, iid)
     found = subtitles.auto_turkish(path, ids, query)
     if not found:
@@ -787,6 +794,22 @@ def api_online_season(tm, n):
 
 
 # ---------------------------------------------------------------- live TV (broadcasters' own free streams)
+
+# ---------------------------------------------------------------- music videos
+
+@app.route('/api/clips')
+def api_clips():
+    return jsonify({'clips': clips.listing()})
+
+
+@app.route('/img/clip/<int:cid>')
+def img_clip(cid):
+    p = clips.thumb_path(cid)
+    if not os.path.exists(p):
+        abort(404)
+    w = request.args.get('w', 0, type=int)
+    return _send_image(p, w if 0 < w < 640 else None)
+
 
 @app.route('/api/live')
 def api_live():
@@ -933,7 +956,7 @@ def api_settings():
             abort(403)
         d = request.get_json(force=True, silent=True) or {}
         values = {k: str(v).strip() for k, v in d.items() if k in ('movie_dir', 'series_dir', 'omdb_api_key') and str(v).strip()}
-        for kind in ('movie', 'series'):
+        for kind in ('movie', 'series', 'music'):
             if isinstance(d.get(f'{kind}_dirs'), list):
                 dirs = []
                 for p in d[f'{kind}_dirs']:
@@ -941,7 +964,8 @@ def api_settings():
                     if p and p not in dirs:
                         dirs.append(p)
                 values[f'{kind}_dirs'] = json.dumps(dirs, ensure_ascii=False)
-                values[f'{kind}_dir'] = dirs[0] if dirs else ''  # read by older versions
+                if kind != 'music':
+                    values[f'{kind}_dir'] = dirs[0] if dirs else ''  # read by older versions
         if 'download_mbps' in d:
             values['download_mbps'] = str(downloads.set_limit(d['download_mbps']))
         settings.update(values)
@@ -950,11 +974,12 @@ def api_settings():
         stats = {'movies': c.execute("SELECT COUNT(*) FROM movies").fetchone()[0],
                  'series': c.execute("SELECT COUNT(*) FROM series").fetchone()[0],
                  'episodes': c.execute("SELECT COUNT(*) FROM episodes").fetchone()[0],
-                 'collections': c.execute("SELECT COUNT(*) FROM collections").fetchone()[0]}
+                 'collections': c.execute("SELECT COUNT(*) FROM collections").fetchone()[0],
+                 'clips': c.execute("SELECT COUNT(*) FROM music_videos").fetchone()[0]}
     from .config import PORT
     # Folder paths and the API key are only shown to (and editable from) this computer, not other devices on the LAN.
     private = {k: settings.get(k, '') if local else '' for k in ('movie_dir', 'series_dir', 'omdb_api_key')}
-    for kind in ('movie', 'series'):
+    for kind in ('movie', 'series', 'music'):
         private[f'{kind}_dirs'] = library_dirs(settings, kind) if local else []
     return jsonify({**private, 'local': local, 'stats': stats, 'download_mbps': downloads.limit_mbps(), 'version': get_version(), 'urls': [f"http://{ip}:{PORT}" for ip in lan_ips()]})
 
