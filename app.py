@@ -13,7 +13,7 @@ from homeflix.db import init_db  # noqa: E402
 
 init_db()
 
-from homeflix import discovery, library, livetv, metadata, online, state  # noqa: E402
+from homeflix import clips, discovery, library, livetv, metadata, online, state  # noqa: E402
 from homeflix.api import app, lan_ips, settings  # noqa: E402
 from homeflix.config import PORT  # noqa: E402
 
@@ -23,6 +23,7 @@ def startup_jobs():
         library.fill_file_info()
         library.cleanup_titles()
         library.sync_emby(settings)
+        clips.scan(settings)
     except Exception as e:
         print(f"Başlangıç işi hatası: {e}")
     state.bump()

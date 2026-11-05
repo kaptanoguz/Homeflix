@@ -9,6 +9,16 @@ const LOCALE = LANG === 'en' ? 'en-GB' : 'tr-TR';
 try { document.cookie = 'hf_lang=' + LANG + '; path=/; max-age=31536000; samesite=lax'; } catch {}
 
 const EN = {
+  // music videos
+  'Klipler': 'Music Videos', 'Klip': 'Music', 'Müzik Klipleri': 'Music Videos', '{n} klip': '{n} music video|{n} music videos',
+  '{n} sanatçı': '{n} artist|{n} artists', 'Karışık Çal': 'Shuffle Play', 'Sanatçı veya şarkı ara…': 'Search artists or songs…',
+  'Son Eklenenler': 'Recently Added', 'Tüm Klipler': 'All Music Videos', 'Sanatçı (A–Z)': 'Artist (A–Z)', 'Şarkı (A–Z)': 'Song (A–Z)',
+  'Bilinmeyen sanatçı': 'Unknown artist', 'Henüz klip yok': 'No music videos yet',
+  'Ayarlar › Kütüphane bölümünden müzik klibi klasörü ekleyin.': 'Add a music video folder in Settings › Library.',
+  'Klip bulunamadı': 'No music videos found', 'Klip listesi alınamadı': 'Could not load the music videos',
+  'Müzik klibi klasörleri': 'Music video folders', 'Bu klasörü müzik klibi klasörü olarak ekle': 'Add this folder as a music video folder',
+  'Sonraki klip (N)': 'Next music video (N)', 'Sıradaki: {t}': 'Up next: {t}',
+
   // navigation and page titles
   'Homeflix ana sayfa': 'Homeflix home', 'Ana Sayfa': 'Home', 'Filmler': 'Movies', 'Diziler': 'Series',
   'Koleksiyonlar': 'Collections', 'Canlı TV': 'Live TV', 'Canlı': 'Live', 'Listem': 'My List', 'Ayarlar': 'Settings',
