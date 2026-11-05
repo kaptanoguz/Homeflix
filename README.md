@@ -1,79 +1,123 @@
 # Homeflix
 
-A personal movie and TV platform for your home network: watch the movies and series on your own computer from your phone, TV or browser, in a Netflix-style interface.
+**Your own little Netflix, running at home.**
 
-Self-hosted home media server and player for your own library (a lightweight Plex / Jellyfin alternative): TMDb posters and metadata, collections, resume playback, live transcoding of MKV/AVI, subtitles from OpenSubtitles. Python + Flask, runs on Linux and Windows. The interface is in Turkish.
+You have a computer full of movies and series. Homeflix turns it into a cozy streaming service for the whole house: open it on the TV in the living room, on your phone in bed, or in any browser, and pick up right where you left off. No accounts, no subscriptions, no cloud. Everything stays on your own computer.
 
-![Homeflix home page: featured series and the Continue Watching row](docs/screenshots/home.jpg)
+![The Homeflix home page](docs/screenshots/home.jpg)
+
+## Get it
+
+Grab the latest version from the [Releases page](https://github.com/kaptanoguz/Homeflix/releases/latest). There is a ready-to-run download for **Windows**, **macOS** (Apple Silicon and Intel) and **Linux**, plus the **Homeflix TV** app for Android TV and Android phones. You don't need to install Python or anything else.
+
+Then:
+
+1. Open Homeflix and go to **Settings → Library** to pick your movie and series folders.
+2. Give it a minute. Homeflix finds posters, descriptions, cast and ratings for everything on its own.
+3. On your other devices, scan the QR code in **Settings → Other devices**, or install the TV app, which finds the server by itself.
+
+That's it. Grab the popcorn.
+
+## What's inside
+
+### Your library, looking its best
+
+Every movie and series gets a proper poster, backdrop, description, cast and rating. Sequels are grouped into collections automatically (all the John Wicks together, all the Harry Potters together), and episodes of the same show spread over different folders end up in one place.
+
+![Movies](docs/screenshots/movies.jpg)
+
+![Collections](docs/screenshots/collections.jpg)
+
+Open any title for the details: which streaming services also carry it, the rest of its collection, similar titles, and a download button to take it with you.
+
+![A movie's details](docs/screenshots/detail.jpg)
+
+![A series with its episodes](docs/screenshots/series-detail.jpg)
+
+### It just plays
+
+MKV, AVI and other files that browsers normally refuse are converted on the fly, so they simply start playing. You can switch between the dubbed and original audio, and subtitles are easy: files next to the video, subtitles inside the video, or a search on the internet. If a foreign film has no Turkish subtitle, Homeflix goes and finds one for you.
+
+Stop a movie on your phone and continue on the TV. When you pause, Homeflix shows you who's in the scene and what to watch next. When an episode ends, the next one starts by itself.
+
+### Online
+
+Want to watch something you don't have? The **Online** tab shows popular and trending movies and series (the list comes from TMDb) and plays them over the internet through frameXTV's player. Nothing is downloaded. Titles you already own are marked *In library*, and your progress is remembered just like with your own files.
+
+![The Online tab](docs/screenshots/online.jpg)
+
+### Live TV
+
+More than 60 free channels, straight from the broadcasters' own websites: national channels, news, sports, documentaries, kids and music. Channels that go off the air quietly disappear from the list.
+
+![Live TV](docs/screenshots/live.jpg)
+
+### Music Videos
+
+Point Homeflix at a folder of music videos and you get a music channel of your own. Browse by artist, shuffle everything, or let one video roll into the next. Each artist gets a page with a photo and a short bio.
+
+![Music Videos](docs/screenshots/clips.jpg)
+
+![An artist page](docs/screenshots/artist.jpg)
+
+Pause a video to see the song's album, year and genre, more from the same artist, and similar videos.
+
+![The pause screen of a music video](docs/screenshots/clip-pause.jpg)
+
+### Kids Zone
+
+A bright, friendly corner with only cartoons, animations and family movies, and a *Surprise Movie!* button for when nobody can decide.
+
+![Kids Zone](docs/screenshots/kids.jpg)
+
+### Find anything fast
+
+Press `/` anywhere and start typing. Search doesn't mind missing Turkish letters, so "sirin" finds "Şirin". It looks in your library and in the Online catalog at the same time. Can't decide at all? The shuffle button picks a random movie, filtered by genre and rating if you like.
+
+![Search](docs/screenshots/search.jpg)
+
+### On every screen
+
+Homeflix works on a computer, a phone, a tablet and a TV. On phones the menu moves to the bottom, and on Android TV the remote's arrows, OK and play/pause buttons do what you expect. Everyone in the house keeps their own *Continue Watching* and *My List*.
+
+![Homeflix on a phone](docs/screenshots/phones.jpg)
+
+## Settings
+
+Everything is in one place, with a big panel that's easy to use from the couch with a TV remote.
+
+| | |
+|---|---|
+| ![Library settings](docs/screenshots/settings-library.jpg) | ![Subtitle settings](docs/screenshots/settings-subs.jpg) |
+| **Library:** as many movie, series and music video folders as you like, picked with a folder browser. | **Subtitles:** size and background, and whether Turkish subtitles turn on by themselves. |
+| ![Random movie settings](docs/screenshots/settings-random.jpg) | ![Download settings](docs/screenshots/settings-downloads.jpg) |
+| **Random movie:** which genres and minimum rating the shuffle button picks from. | **Downloads:** a speed limit, so a download never slows down someone who's watching. |
+| ![Other devices](docs/screenshots/settings-devices.jpg) | ![Language](docs/screenshots/settings-lang.jpg) |
+| **Other devices:** a QR code and the address to open on your phone, tablet or TV. | **Language:** Homeflix speaks English and Turkish. |
+
+## The TV app
+
+**Homeflix TV** is a small Android app for TVs and phones. Install it, open it, and it finds the Homeflix server on your Wi-Fi by itself. If you have more than one, it asks which one to use. You'll find it on the [Releases page](https://github.com/kaptanoguz/Homeflix/releases), and the details are in [android-tv/README.md](android-tv/README.md).
+
+## Good to know
+
+- **ffmpeg** makes MKV/AVI playback and built-in subtitles work. Install it once with `winget install ffmpeg` (Windows), `brew install ffmpeg` (macOS) or `sudo apt install ffmpeg` (Linux).
+- **Movie details** come from TMDb. If you'd like to use your own keys for TMDb, OMDb or OpenSubtitles (for subtitle search), put them in a `secrets.json` file. [`secrets.example.json`](secrets.example.json) shows how it looks.
+- **Your data** (library, posters, watch history) is stored on your computer: `%APPDATA%\Homeflix` on Windows, `~/Library/Application Support/Homeflix` on macOS, `~/.local/share/homeflix` on Linux.
+- Homeflix is meant for your home network. Other devices connect to `http://<your-computer's-address>:5000`, which Settings shows you.
+
+## Running from source
+
+If you'd rather run the code directly on Linux, all you need is Python 3. The first run sets everything up by itself.
 
 ```bash
-./run.sh              # app window
-./run.sh --browser    # in the default browser
-./run.sh --headless   # server only
+./run.sh              # opens in its own window
+./run.sh --browser    # opens in your browser
+./run.sh --headless   # just the server, for a computer without a screen
 ```
 
-From other devices: `http://<computer-ip-address>:5000` (the address is shown on the Settings screen).
-For a different port: `HOMEFLIX_PORT=5001 ./run.sh`.
-
-## Getting your API keys
-
-**OMDb API key** (for posters & metadata)
-1. Go to https://www.omdbapi.com/apikey.aspx
-2. Select the FREE tier (1,000 daily requests)
-3. Enter your email and submit
-4. Check your email for the API key
-5. Paste it into Home Theater settings
-
-**OpenSubtitles API key** (for subtitles, optional)
-1. Create an account at https://www.opensubtitles.com
-2. Go to https://www.opensubtitles.com/consumers
-3. Register a new consumer/app to get your API key
-4. Paste it into Home Theater settings
-
-## Features
-
-- **Home page:** rotating featured banner, Continue Watching, My List, Recently Added, Collections, Series, Top Rated, and rows by genre.
-- **Collections:** sequels (Matrix 1-2-3, Felekten Bir Gece 1-2-3, Harry Potter…) are grouped automatically from TMDb. Those not on TMDb are grouped by the number in their name.
-- **Detail page:** backdrop image, runtime, genres, collection strip, similar titles. Several files of the same movie are grouped under "Versions".
-- **Series:** episode titles, descriptions and images from TMDb. A progress bar and a "Watched" mark per episode. Episodes of the same series in different folders are merged.
-- **Player:**
-  - Files the browser can't open (mkv, avi, ts, VOB) are transcoded live and played straight away.
-  - Audio track selection (dubbed / original).
-  - Subtitle sources: local `.srt/.vtt/.ass`, subtitles embedded in mkv, OpenSubtitles search, loading from a file, or drag and drop.
-  - Subtitle size, background and sync (±0.5 s) are adjustable.
-  - Playback resumes where you left off, and the next episode starts automatically after a countdown.
-  - Playback speed, keyboard shortcuts and full screen.
-- **Online:** movies and series that aren't in your library. The list and search come from TMDb, and playback streams from the internet through frameXTV's player (nothing is downloaded). Resume, Continue Watching and My List work for online titles too. Titles you already have are marked "KÜTÜPHANEDE" (in library). The catalog and posters are stored on the server, so devices without internet still see the list, posters and ratings (video needs internet). When the server can reach the internet it refreshes the catalog every 6 hours; without internet it retries every 10 minutes. The player address can be changed with `online_embed` in `secrets.json` or `HOMEFLIX_ONLINE_EMBED`.
-- **My List and watch progress** are kept on the server. A movie you stop on your phone resumes where you left off on the computer.
-- **Search:** instant search, opened with the `/` key. It ignores Turkish accents ("sirin" → "Şirin").
-
-## Screenshots
-
-![Recently Added and Collections rows](docs/screenshots/rows.jpg)
-
-![Collections: sequels are grouped automatically](docs/screenshots/collections.jpg)
-
-## Structure
-
-```
-app.py                 entry point (server + window)
-homeflix/
-  config.py            paths, API keys
-  db.py                SQLite schema and migrations
-  names.py             title / season / episode parsing from file names
-  library.py           disk scan, Emby/Jellyfin .nfo files and posters
-  metadata.py          TMDb/OMDb enrichment, collections, episode details
-  media.py             ffprobe analysis, live streaming, image cache
-  subtitles.py         local, embedded and online subtitles
-  api.py               HTTP endpoints
-templates/index.html   page skeleton and icons
-static/app.css         design system
-static/app.js          interface and player
-data/                  database, posters, cache (copied from v1)
-```
-
-v1 (`../Homeflix_Linux`) is left as it is; v2 runs independently of it.
+Want another port? `HOMEFLIX_PORT=5001 ./run.sh`
 
 ## License
 
-Homeflix is free software, released under the [GNU General Public License v3.0](LICENSE). You may use, change and share it. If you distribute a changed version, you must share its source code under the same license.
+Homeflix is free software under the [GNU General Public License v3.0](LICENSE). Use it, change it, share it. If you share a changed version, share its source code under the same license too.
