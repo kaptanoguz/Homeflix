@@ -99,9 +99,9 @@ public class MainActivity extends Activity {
         if (hasSavedUrl()) {
             load(currentUrl());
         } else {
-            showStatus("HOMEFLIX\n\nAğda Homeflix sunucusu aranıyor…");
+            showStatus("LUMBUZ\n\nAğda Lumbuz sunucusu aranıyor…");
             discover(servers -> pickServer(servers,
-                    "Ağda Homeflix sunucusu bulunamadı. Homeflix'in çalıştığı bilgisayarın adresini girin. Bir kez sorulur, sonra hatırlanır."));
+                    "Ağda Lumbuz sunucusu bulunamadı. Lumbuz'un çalıştığı bilgisayarın adresini girin. Bir kez sorulur, sonra hatırlanır."));
         }
     }
 
@@ -122,7 +122,7 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
-                // Homeflix menü ve oynatıcıyı açarken geçmişe kayıt ekler (history.pushState) ve WebView bunu da
+                // Lumbuz menü ve oynatıcıyı açarken geçmişe kayıt ekler (history.pushState) ve WebView bunu da
                 // sayfa yüklendi diye bildirir; bu yüzden burada geçmiş silinmemeli, yoksa X / geri oku çalışmaz.
                 if (loadFailed) return;
                 hideOffline();
@@ -200,7 +200,7 @@ public class MainActivity extends Activity {
     private void showOffline() {
         offline = true;
         String host = Uri.parse(currentUrl()).getAuthority();
-        offlineView.setText("HOMEFLIX\n\n" + host + " adresine bağlanılamıyor.\n"
+        offlineView.setText("LUMBUZ\n\n" + host + " adresine bağlanılamıyor.\n"
                 + "Bilgisayar açık mı? 5 saniye içinde tekrar denenecek.\n\n"
                 + "Adresi değiştirmek için OK tuşuna basın ya da ekrana dokunun.");
         offlineView.setVisibility(View.VISIBLE);
@@ -209,7 +209,7 @@ public class MainActivity extends Activity {
         // Bilgisayarın adresi değişmiş olabilir (modem yeni IP vermiş): bir kez ağda aranır, bulunursa oraya geçilir.
         if (!searchedThisOutage) {
             searchedThisOutage = true;
-            // Ağda birden fazla Homeflix varsa kendiliğinden geçmez; OK > "Otomatik bul" ile seçilir.
+            // Ağda birden fazla Lumbuz varsa kendiliğinden geçmez; OK > "Otomatik bul" ile seçilir.
             discover(servers -> {
                 if (servers.size() != 1 || !offline) return;
                 String url = servers.get(0)[0];
@@ -246,7 +246,7 @@ public class MainActivity extends Activity {
         }
         handler.removeCallbacks(retry);
         dialog = new AlertDialog.Builder(this)
-                .setTitle("Hangi Homeflix'e bağlanılsın?")
+                .setTitle("Hangi Lumbuz'a bağlanılsın?")
                 .setItems(labels, (d, i) -> useUrl(servers.get(i)[0]))
                 .setNegativeButton("Adresi elle gir", (d, w) -> {
                     dialog = null;
@@ -256,7 +256,7 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    // Tek bir UDP yayını gönderir ("HOMEFLIX?"); ağdaki Homeflix sunucusu "HOMEFLIX <port> <ad>" diye cevap verir.
+    // Tek bir UDP yayını gönderir ("HOMEFLIX?"); ağdaki Lumbuz sunucusu "HOMEFLIX <port> <ad>" diye cevap verir (mesajlar eski adla kaldı, eski sürümlerle uyumlu olsun diye).
     // Ağdaki bütün sunucuların cevabı toplanır. Üç deneme yaklaşık üç saniye sürer.
     private void discover(Found cb) {
         if (searching) return;
@@ -350,7 +350,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(retry);
 
         dialog = new AlertDialog.Builder(this)
-                .setTitle("Homeflix sunucu adresi")
+                .setTitle("Lumbuz sunucu adresi")
                 .setMessage(message)
                 .setView(input)
                 .setPositiveButton("Bağlan", (d, w) -> {
@@ -359,13 +359,13 @@ public class MainActivity extends Activity {
                     load(u);
                 })
                 .setNeutralButton("Otomatik bul", (d, w) -> {
-                    showStatus("HOMEFLIX\n\nAğda Homeflix sunucusu aranıyor…");
+                    showStatus("LUMBUZ\n\nAğda Lumbuz sunucusu aranıyor…");
                     dialog = null;
                     discover(servers -> {
                         if (servers.size() == 1) {
                             Toast.makeText(this, "Bulundu: " + servers.get(0)[1], Toast.LENGTH_SHORT).show();
                         }
-                        pickServer(servers, "Ağda Homeflix sunucusu bulunamadı. Bilgisayar açık ve aynı ağda mı? Adresi elle de girebilirsiniz.");
+                        pickServer(servers, "Ağda Lumbuz sunucusu bulunamadı. Bilgisayar açık ve aynı ağda mı? Adresi elle de girebilirsiniz.");
                     });
                 })
                 .setNegativeButton("İptal", (d, w) -> load(currentUrl()))

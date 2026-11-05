@@ -1,10 +1,10 @@
 #!/bin/bash
-# Homeflix 2 — başlatıcı
+# Lumbuz — başlatıcı
 #   ./run.sh              uygulama penceresiyle açar
 #   ./run.sh --browser    varsayılan tarayıcıda açar
 #   ./run.sh --headless   sadece sunucu (ekransız / arka plan)
 cd "$(dirname "$0")" || exit 1
-PORT="${HOMEFLIX_PORT:-5000}"
+PORT="${LUMBUZ_PORT:-${HOMEFLIX_PORT:-5000}}"
 
 if [ ! -x venv/bin/python ]; then
     echo "İlk kurulum yapılıyor…"

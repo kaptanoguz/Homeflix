@@ -1,4 +1,4 @@
-/* Homeflix TV: kumanda (D-pad) ile gezinme katmanı.
+/* Lumbuz TV: kumanda (D-pad) ile gezinme katmanı.
  * Sayfa her yüklendiğinde enjekte edilir; tek seferlik kurulur. */
 (function () {
   if (window.__hfTv) return;
@@ -146,7 +146,7 @@
       onlineCommand(a);
       return;
     }
-    // Homeflix'in kendi oynatıcı komutları dönüştürülen (mkv/avi) videolarda da doğru sarar.
+    // Lumbuz'un kendi oynatıcı komutları dönüştürülen (mkv/avi) videolarda da doğru sarar.
     if (typeof mediaCommand === 'function') {
       if (typeof P !== 'undefined' && P.open) mediaCommand(a);
       return;

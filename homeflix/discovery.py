@@ -1,7 +1,8 @@
-"""Lets the Homeflix TV app find this server on the home network without anyone typing its address.
+"""Lets the Lumbuz TV app find this server on the home network without anyone typing its address.
 
-The app sends one UDP broadcast, "HOMEFLIX?", to DISCOVERY_PORT. Every Homeflix server on the network answers the
+The app sends one UDP broadcast, "HOMEFLIX?", to DISCOVERY_PORT. Every Lumbuz server on the network answers the
 sender with "HOMEFLIX <web port> <computer name>", and the app opens http://<answering address>:<web port>.
+The messages keep the app's old name, Homeflix, so TV apps installed before the rename still find the server.
 Nothing is sent unless asked, so this costs nothing while nobody is looking.
 """
 import socket
