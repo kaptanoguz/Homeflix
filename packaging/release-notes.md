@@ -1,16 +1,16 @@
 Kişisel film ve dizi platformunuz: bilgisayarınızdaki filmleri ve dizileri ev ağındaki telefon, TV ve tarayıcılardan Netflix tarzı bir arayüzle izleyin.
 
-![Homeflix ana sayfa](https://raw.githubusercontent.com/kaptanoguz/Homeflix_2/__VERSION__/docs/screenshots/home.jpg)
+![Homeflix ana sayfa](https://raw.githubusercontent.com/kaptanoguz/Homeflix/__VERSION__/docs/screenshots/home.jpg)
 
 ## İndir
 
 | Sistem | Dosya | Not |
 |---|---|---|
-| 🪟 **Windows** 10/11 (64-bit) | [`Homeflix-__VERSION__-windows-x64.exe`](https://github.com/kaptanoguz/Homeflix_2/releases/download/__VERSION__/Homeflix-__VERSION__-windows-x64.exe) | Kurulum gerekmez, çift tıklayıp açın |
-| 🍎 **macOS** Apple Silicon (M1–M4) | [`Homeflix-__VERSION__-macos-arm64.dmg`](https://github.com/kaptanoguz/Homeflix_2/releases/download/__VERSION__/Homeflix-__VERSION__-macos-arm64.dmg) | macOS 12 ve üzeri |
-| 🍎 **macOS** Intel | [`Homeflix-__VERSION__-macos-x64.dmg`](https://github.com/kaptanoguz/Homeflix_2/releases/download/__VERSION__/Homeflix-__VERSION__-macos-x64.dmg) | macOS 12 ve üzeri |
-| 🐧 **Linux** (64-bit) | [`Homeflix-__VERSION__-linux-x64.tar.gz`](https://github.com/kaptanoguz/Homeflix_2/releases/download/__VERSION__/Homeflix-__VERSION__-linux-x64.tar.gz) | Ubuntu 22.04+, Debian 12+, Fedora 38+ |
-| 📺 **Android TV / telefon** | [Homeflix TV](https://github.com/kaptanoguz/Homeflix_2/releases/tag/android-tv-v1.1) | Sunucuya bağlanan uygulama |
+| 🪟 **Windows** 10/11 (64-bit) | [`Homeflix-__VERSION__-windows-x64.exe`](https://github.com/kaptanoguz/Homeflix/releases/download/__VERSION__/Homeflix-__VERSION__-windows-x64.exe) | Kurulum gerekmez, çift tıklayıp açın |
+| 🍎 **macOS** Apple Silicon (M1–M4) | [`Homeflix-__VERSION__-macos-arm64.dmg`](https://github.com/kaptanoguz/Homeflix/releases/download/__VERSION__/Homeflix-__VERSION__-macos-arm64.dmg) | macOS 12 ve üzeri |
+| 🍎 **macOS** Intel | [`Homeflix-__VERSION__-macos-x64.dmg`](https://github.com/kaptanoguz/Homeflix/releases/download/__VERSION__/Homeflix-__VERSION__-macos-x64.dmg) | macOS 12 ve üzeri |
+| 🐧 **Linux** (64-bit) | [`Homeflix-__VERSION__-linux-x64.tar.gz`](https://github.com/kaptanoguz/Homeflix/releases/download/__VERSION__/Homeflix-__VERSION__-linux-x64.tar.gz) | Ubuntu 22.04+, Debian 12+, Fedora 38+ |
+| 📺 **Android TV / telefon** | [Homeflix TV](https://github.com/kaptanoguz/Homeflix/releases/tag/android-tv-v1.1) | Sunucuya bağlanan uygulama |
 
 Python ya da başka bir şey kurmanız gerekmez.
 
@@ -43,7 +43,7 @@ Kütüphane verisi (veritabanı, posterler, `secrets.json`) şurada tutulur:
 - macOS: `~/Library/Application Support/Homeflix`
 - Linux: `~/.local/share/homeflix`
 
-TMDb anahtarınızı `secrets.json` dosyasına bu klasörde ekleyebilirsiniz (örnek: [`secrets.example.json`](https://github.com/kaptanoguz/Homeflix_2/blob/main/secrets.example.json)).
+TMDb anahtarınızı `secrets.json` dosyasına bu klasörde ekleyebilirsiniz (örnek: [`secrets.example.json`](https://github.com/kaptanoguz/Homeflix/blob/main/secrets.example.json)).
 
 ## Özellikler
 

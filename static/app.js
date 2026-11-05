@@ -830,7 +830,7 @@ const ST_PANELS = {
 
   about: () => `
     <div class="st-tiles">${stTile(T('Uygulama'), 'Homeflix 2')}${stTile(T('Lisans'), 'GPL-3.0')}${stTile(T('Film bilgileri'), 'TMDb · Emby · OMDb')}${stTile(T('Bu sunucu'), `<span class="st-mono">${esc(location.host)}</span>`)}</div>
-    <div class="st-tiles">${stTile(T('Sürüm'), `<span class="st-mono">${esc(ST.s.version || '')}</span>`)}${stTile(T('Depo'), `<span class="st-mono">kaptanoguz/Homeflix_2</span>`)}</div>
+    <div class="st-tiles">${stTile(T('Sürüm'), `<span class="st-mono">${esc(ST.s.version || '')}</span>`)}${stTile(T('Depo'), `<span class="st-mono">kaptanoguz/Homeflix</span>`)}</div>
     ${stHint(T("Homeflix 2 · Film bilgileri TMDb, Emby ve OMDb'den alınır."))}`,
 };
 
