@@ -10,7 +10,7 @@
 | 🍎 **macOS** Apple Silicon (M1–M4) | [`Lumbuz-__VERSION__-macos-arm64.dmg`](https://github.com/kaptanoguz/Lumbuz/releases/download/__VERSION__/Lumbuz-__VERSION__-macos-arm64.dmg) | macOS 12 ve üzeri |
 | 🍎 **macOS** Intel | [`Lumbuz-__VERSION__-macos-x64.dmg`](https://github.com/kaptanoguz/Lumbuz/releases/download/__VERSION__/Lumbuz-__VERSION__-macos-x64.dmg) | macOS 12 ve üzeri |
 | 🐧 **Linux** (64-bit) | [`Lumbuz-__VERSION__-linux-x64.tar.gz`](https://github.com/kaptanoguz/Lumbuz/releases/download/__VERSION__/Lumbuz-__VERSION__-linux-x64.tar.gz) | Ubuntu 22.04+, Debian 12+, Fedora 38+ |
-| 📺 **Android TV / telefon** | [Lumbuz TV](https://github.com/kaptanoguz/Lumbuz/releases/tag/android-tv-v1.1) | Sunucuya bağlanan uygulama |
+| 📺 **Android TV / telefon** | [Lumbuz TV](https://github.com/kaptanoguz/Lumbuz/releases/tag/android-tv-v1.3) | Sunucuya bağlanan uygulama |
 
 Python ya da başka bir şey kurmanız gerekmez.
 
