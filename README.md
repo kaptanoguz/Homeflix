@@ -118,6 +118,10 @@ If you'd rather run the code directly on Linux, all you need is Python 3. The fi
 
 Homeflix uses port 5000. If something else on your computer already uses it, pick another one with the `HOMEFLIX_PORT` setting, for example `HOMEFLIX_PORT=8080 ./run.sh`.
 
+## Contact
+
+Questions, ideas or just want to say hi? Write to [info@esoramaritime.com](mailto:info@esoramaritime.com) or visit [esoramaritime.com](https://esoramaritime.com).
+
 ## License
 
 Homeflix is free software under the [GNU General Public License v3.0](LICENSE). Use it, change it, share it. If you share a changed version, share its source code under the same license too.
