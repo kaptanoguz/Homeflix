@@ -116,7 +116,7 @@ If you'd rather run the code directly on Linux, all you need is Python 3. The fi
 ./run.sh --headless   # just the server, for a computer without a screen
 ```
 
-Want another port? `HOMEFLIX_PORT=5001 ./run.sh`
+Homeflix uses port 5000. If something else on your computer already uses it, pick another one with the `HOMEFLIX_PORT` setting, for example `HOMEFLIX_PORT=8080 ./run.sh`.
 
 ## License
 
