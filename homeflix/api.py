@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from flask import Flask, Response, abort, g, jsonify, render_template, request, send_file
 
-from . import clipmeta, clips, downloads, library, livetv, media, metadata, online, state, subtitles
+from . import clipmeta, clips, downloads, iptv, library, livetv, media, metadata, online, state, subtitles
 from .config import BASE_DIR, ONLINE_EMBED, POSTERS_DIR
 from .db import LOCAL_VIEWER, library_dirs, load_settings, save_settings, session
 from .names import EXTRA_BASE, extra_title, fold, sequel_key
@@ -846,6 +846,78 @@ def api_live_playlist(cid):
     if not livetv.proxy_allowed(cid, url):
         abort(404)
     status, text = livetv.proxy_playlist(cid, url)
+    if status != 200:
+        abort(502)
+    resp = app.response_class(text, mimetype='application/vnd.apple.mpegurl')
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
+# ---------------------------------------------------------------- live TV: the viewer's own IPTV subscription
+
+def _iptv_source(sid):
+    r = iptv.visible(sid, viewer())
+    if not r:
+        abort(404)
+    return r
+
+
+@app.route('/api/iptv', methods=['GET', 'POST'])
+def api_iptv():
+    if request.method == 'POST':
+        d = request.get_json(force=True, silent=True) or {}
+        try:
+            src = iptv.add(viewer(), str(d.get('kind', '')), str(d.get('name', '')), str(d.get('url', '')),
+                           str(d.get('username', '')).strip(), str(d.get('password', '')).strip(), bool(d.get('shared')))
+        except iptv.IptvError as e:
+            return jsonify({'error': str(e)}), 400
+        return jsonify(src)
+    return jsonify({'sources': iptv.sources(viewer())})
+
+
+@app.route('/api/iptv/<int:sid>', methods=['POST', 'DELETE'])
+def api_iptv_source(sid):
+    if request.method == 'DELETE':
+        return ('', 204) if iptv.remove(sid, viewer()) else abort(404)
+    d = request.get_json(force=True, silent=True) or {}
+    if not iptv.update(sid, viewer(), d.get('name'), d.get('shared')):
+        abort(404)
+    return ('', 204)
+
+
+@app.route('/api/iptv/<int:sid>/refresh', methods=['POST'])
+def api_iptv_refresh(sid):
+    _iptv_source(sid)
+    try:
+        iptv.refresh(sid)
+    except iptv.IptvError as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify(next(s for s in iptv.sources(viewer()) if s['id'] == sid))
+
+
+@app.route('/api/iptv/<int:sid>/groups')
+def api_iptv_groups(sid):
+    iptv.refresh_if_old(_iptv_source(sid))
+    return jsonify(iptv.groups(sid))
+
+
+@app.route('/api/iptv/<int:sid>/channels')
+def api_iptv_channels(sid):
+    _iptv_source(sid)
+    g = request.args.get('g')
+    return jsonify(iptv.channels(sid, g, request.args.get('q', '')[:80], max(0, request.args.get('off', 0, type=int)),
+                                 min(500, max(1, request.args.get('lim', iptv.PAGE, type=int))),
+                                 request.args.get('no', 0, type=int)))
+
+
+@app.route('/api/iptv/pl/<int:sid>')
+def api_iptv_playlist(sid):
+    """An IPTV playlist's text passed through for browsers (the provider sends no CORS header). Never video."""
+    _iptv_source(sid)
+    url = request.args.get('u', '')
+    if not iptv.proxy_allowed(sid, url):
+        abort(404)
+    status, text = iptv.proxy_playlist(sid, url)
     if status != 200:
         abort(502)
     resp = app.response_class(text, mimetype='application/vnd.apple.mpegurl')

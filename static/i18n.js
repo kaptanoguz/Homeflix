@@ -188,6 +188,35 @@ const EN = {
   '{name} şu an açılmıyor': '{name} is not opening right now',
   'Bu kanal yalnızca Türkiye içinden izlenebiliyor. ': 'This channel can only be watched from inside Turkey. ',
   'Başka bir kanal seçin': 'Pick another channel', 'Bu numarada kanal yok.': 'No channel has this number.',
+  // live TV: the viewer's own IPTV lists
+  'Diğer': 'Other', 'Lumbuz Kanalları': 'Lumbuz Channels', 'IPTV Ekle': 'Add IPTV', 'M3U listesi': 'M3U list',
+  'Bitiş: {d}': 'Expires: {d}', '{n} bağlantı': '{n} connection|{n} connections', 'Tüm cihazlarda': 'On all devices',
+  'Güncellendi: {d}': 'Updated: {d}', 'Yenile': 'Refresh', 'Düzenle': 'Edit', 'Daha fazla göster ({n})': 'Show more ({n})',
+  'Bu sunucuya bağlanan tüm cihazlarda göster': 'Show on every device connected to this server',
+  'Kapalıyken liste yalnızca bu cihazda görünür. Açıkken bu Lumbuz’u kullanan herkes aboneliğinizle izleyebilir (TV’de eklemek yerine telefondan eklemek için kullanışlı).':
+    'When off, the list only shows on this device. When on, everyone using this Lumbuz can watch with your subscription (handy for adding it from a phone instead of typing on the TV).',
+  'IPTV listesini düzenle': 'Edit IPTV list', 'Liste adı': 'List name', 'Kaydet': 'Save', 'Listeyi sil': 'Delete list',
+  'IPTV aboneliğiniz varsa kanal listenizi buraya ekleyin. Kanallar bu cihazda, doğrudan sağlayıcınızdan açılır.':
+    'If you have an IPTV subscription, add your channel list here. Channels play on this device, straight from your provider.',
+  'M3U bağlantısı': 'M3U link', 'Liste adı (isteğe bağlı)': 'List name (optional)', 'Örn. Ev IPTV': 'e.g. Home IPTV',
+  'Sunucu adresi': 'Server address', 'Kullanıcı adı': 'Username', 'Şifre': 'Password', 'Listeyi ekle': 'Add list',
+  'Lütfen tüm alanları doldurun.': 'Please fill in all fields.', 'Kanal listesi yenileniyor…': 'Refreshing the channel list…',
+  'Silmek için tekrar basın': 'Press again to delete', 'Liste okunuyor…': 'Reading the list…',
+  '{name}: {n} kanal eklendi': '{name}: {n} channel added|{name}: {n} channels added',
+  'Bu IPTV yayını şifresiz (http) olduğu için güvenli (https) adreste açılmıyor; Lumbuz’u ev ağındaki adresinden açın. ':
+    'This IPTV stream is unencrypted (http), so it does not open on a secure (https) address; open Lumbuz from its home network address. ',
+  'IPTV sağlayıcınız yayını vermedi: abonelik süresi ya da aynı anda bağlantı sınırı dolmuş olabilir. ':
+    'Your IPTV provider did not send the stream: the subscription may have expired or its connection limit may be reached. ',
+  // messages from the server (iptv.py)
+  'Bağlantı http:// ya da https:// ile başlamalı.': 'The link must start with http:// or https://.',
+  'Bu adres kullanılamaz.': 'This address cannot be used.', 'Sunucu bulunamadı. Adresi kontrol edin.': 'Server not found. Check the address.',
+  'IPTV sunucusuna bağlanılamadı.': 'Could not connect to the IPTV server.',
+  'IPTV sunucusu girişi kabul etmedi. Kullanıcı adı ve şifreyi kontrol edin.': 'The IPTV server refused the login. Check the username and password.',
+  'Kanal listesi çok büyük.': 'The channel list is too large.', 'Kanal listesi indirilemedi.': 'Could not download the channel list.',
+  'Bu bağlantı bir M3U kanal listesi değil.': 'This link is not an M3U channel list.',
+  'Listede canlı kanal bulunamadı.': 'No live channels were found in the list.',
+  'Bu adres bir Xtream Codes sunucusu değil.': 'This address is not an Xtream Codes server.',
+  'Kanal listesi okunamadı.': 'Could not read the channel list.', 'Geçersiz liste türü.': 'Invalid list type.',
   'Ulusal': 'National', 'Haber': 'News', 'Spor': 'Sports', 'Belgesel': 'Documentary', 'Çocuk': 'Kids', 'Müzik': 'Music', 'Dünya': 'World',
 
   // random movie, misc
@@ -226,6 +255,7 @@ const epCode = (s, e) => `S${s}:${LANG === 'en' ? 'E' : 'B'}${e}`;
 const TX_PATTERNS = [
   [/^Bilgiler zenginleştiriliyor (.*)$/, 'Fetching details $1'],
   [/^Oyuncu bilgileri indiriliyor (.*)$/, 'Downloading cast details $1'],
+  [/^IPTV sunucusu hata verdi \((\d+)\)\.$/, 'The IPTV server returned an error ($1).'],
 ];
 function tx(s) {
   if (LANG !== 'en' || !s) return s;
