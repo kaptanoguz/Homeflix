@@ -2230,8 +2230,15 @@ window.addEventListener('pagehide', () => { if (OP.open) saveOnline(true); });
 // logos and checks every few hours which ones are on air. Apple devices and LG TVs play HLS natively; the others
 // use hls.js (loaded on first use), and fall back to the native player when a broadcaster blocks hls.js (CORS).
 const LV = { data: null, loading: false, error: false, cat: '', q: '', open: false, cur: null, prev: null, pcat: '',
-  list: false, hl: null, hls: null, seq: 0, uiT: 0, osdT: 0, listT: 0, numBuf: '', numT: 0, failT: 0, pre: new Set() };
+  list: false, hl: null, hls: null, seq: 0, uiT: 0, osdT: 0, listT: 0, numBuf: '', numT: 0, failT: 0, pre: new Set(),
+  // The viewer's own IPTV lists: src = the list shown ('' = Lumbuz's built-in channels, else a list id), srcs = the
+  // lists, pool = every IPTV channel seen so far by id, ipGroups = each list's groups, ipg/ipq = the page's group
+  // ('' or 'g:<name>') and search, ipItems = the channels on the page, ipRows = the player's list.
+  src: store.get('live_src', ''), srcs: null, pool: new Map(), ipGroups: {}, ipg: '', ipq: '', ipItems: [], ipTotal: 0,
+  ipSeq: 0, ipRows: [], ipRowSeq: 0 };
 const LIVE_CAT = id => tx(LV.data?.cats.find(c => c.id === id)?.n || '');
+const liveCat = ch => (ch.src ? ch.cat || T('Diğer') : LIVE_CAT(ch.cat));
+const liveFind = id => LV.pool.get(id) || LV.data?.channels.find(c => c.id === id);
 const lVideo = () => $('#l-video');
 const PORTRAIT = () => window.matchMedia('(max-width: 760px) and (orientation: portrait)').matches;
 
@@ -2244,7 +2251,8 @@ async function loadLive() {
 }
 
 function liveLogo(ch) {
-  return `<div class="l-logo">${ch.logo ? `<img src="${ch.logo}" alt="" loading="lazy" onerror="this.outerHTML='<div class=lt>${esc(ch.n.replace(/['"\\]/g, ''))}</div>'">`
+  // A logo that doesn't load becomes the channel's name (as text: IPTV names come from the provider).
+  return `<div class="l-logo">${ch.logo ? `<img src="${esc(ch.logo)}" alt="${esc(ch.n)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'lt',textContent:this.alt}))">`
     : `<div class="lt" style="color:hsl(${hue(ch.n)},70%,82%)">${esc(ch.n)}</div>`}</div>`;
 }
 
@@ -2257,16 +2265,23 @@ function liveFilter(cat, q = '') {
 function liveCard(ch) {
   const watching = LV.open && LV.cur?.id === ch.id;
   return `<button class="lv-card" data-live="${esc(ch.id)}"><span class="lv-no">${ch.no}</span>
-    <span class="lv-name">${esc(ch.n)}</span><span class="lv-meta">${esc(LIVE_CAT(ch.cat))}${ch.tr ? ' · ' + T('Türkiye') : ''}</span>
-    ${liveLogo(ch)}<span class="lv-badges"><span class="lv-pill">${T(watching ? 'İZLENİYOR' : 'CANLI')}</span><span class="lv-q">${esc(ch.q)}</span></span></button>`;
+    <span class="lv-name">${esc(ch.n)}</span><span class="lv-meta">${esc(liveCat(ch))}${ch.tr ? ' · ' + T('Türkiye') : ''}</span>
+    ${liveLogo(ch)}<span class="lv-badges"><span class="lv-pill">${T(watching ? 'İZLENİYOR' : 'CANLI')}</span>${ch.q ? `<span class="lv-q">${esc(ch.q)}</span>` : ''}</span></button>`;
 }
 
 async function renderLive() {
   const view = $('#view');
   const head = n => `<div class="page-head"><h1>${T('Canlı TV')}</h1><span class="count">${n}</span></div>`;
+  if (!LV.srcs) {
+    await loadIptvSources();
+    if (S.view !== 'live') return;
+  }
+  const src = LV.src && LV.srcs.find(x => x.id === LV.src);
+  if (src) return renderIptv(src);
+  LV.src = '';
   if (!LV.data) {
     if (LV.error) {
-      view.innerHTML = head('') + `<div class="grid">${emptyState('Kanal listesi alınamadı', 'Lumbuz sunucusuna ulaşılamıyor.', 'live')}</div>
+      view.innerHTML = head('') + liveSourceBar() + `<div class="grid">${emptyState('Kanal listesi alınamadı', 'Lumbuz sunucusuna ulaşılamıyor.', 'live')}</div>
         <div style="text-align:center;margin-top:-60px"><button class="btn btn-ghost" data-action="live-retry">${icon('refresh')}${T('Tekrar Dene')}</button></div>`;
       return;
     }
@@ -2279,7 +2294,7 @@ async function renderLive() {
   const items = liveFilter(LV.cat, LV.q);
   const recent = !LV.cat && !LV.q ? liveRecent().slice(0, 6) : [];
   const count = c => all.filter(x => x.cat === c).length;
-  view.innerHTML = head(`<span class="lv-dot"></span>${T('{n} kanal', { n: all.length })}`) + `
+  view.innerHTML = head(`<span class="lv-dot"></span>${T('{n} kanal', { n: all.length })}`) + liveSourceBar() + `
     <div class="lv-tools">
       <div class="chips" id="lv-chips"><button class="chip${LV.cat ? '' : ' on'}" data-lcat="">${T('Tümü')}</button>${LV.data.cats.filter(c => count(c.id))
         .map(c => `<button class="chip${LV.cat === c.id ? ' on' : ''}" data-lcat="${c.id}">${esc(tx(c.n))}<span class="n">${count(c.id)}</span></button>`).join('')}</div>
@@ -2294,16 +2309,287 @@ async function renderLive() {
   });
 }
 
+/* ---- the viewer's own IPTV lists (M3U link or Xtream Codes login) */
+// The Lumbuz server reads the provider's channel list and pages it, so a TV never loads thousands of channels at
+// once. Video goes from the provider straight to this device, like the built-in channels.
+async function loadIptvSources() {
+  try { LV.srcs = (await api.get('/api/iptv')).sources; } catch { LV.srcs = LV.srcs || []; }
+  return LV.srcs;
+}
+
+function liveSourceBar() {
+  return `<div class="lv-srcs" id="lv-srcs">
+    <button class="lv-src${LV.src ? '' : ' on'}" data-lsrc="">${icon('livetv')}<span>${T('Lumbuz Kanalları')}</span></button>
+    ${(LV.srcs || []).map(s => `<button class="lv-src${LV.src === s.id ? ' on' : ''}" data-lsrc="${s.id}">${icon('list')}<span>${esc(s.name)}</span></button>`).join('')}
+    <button class="lv-src add" data-action="iptv-add">${icon('plus')}<span>${T('IPTV Ekle')}</span></button></div>`;
+}
+
+function setLiveSource(id) {
+  if (LV.src === id) return;
+  LV.src = id;
+  store.set('live_src', id);
+  LV.ipg = ''; LV.ipq = ''; LV.ipItems = []; LV.ipTotal = 0;
+  renderLive().then(() => $(`#lv-srcs [data-lsrc="${id}"]`)?.focus());
+}
+
+// A short id from the stream link, so the same channel keeps its id when the provider reorders the list.
+function urlKey(u) { let h = 5381; for (let i = 0; i < u.length; i++) h = (h * 33 ^ u.charCodeAt(i)) >>> 0; return h.toString(36); }
+
+function ipCh(sid, it) {
+  const id = `i${sid}:${urlKey(it.url)}`;
+  let ch = LV.pool.get(id);
+  if (!ch) LV.pool.set(id, ch = { id, n: it.n, cat: it.g || '', no: it.no, q: '', logo: it.logo || '', url: it.url, src: sid });
+  ch.no = it.no;
+  return ch;
+}
+
+// Xtream panels serve every channel as HLS too (/live/user/pass/id.m3u8), which browsers play better than the
+// MPEG-TS link many M3U lists carry; the list's own link stays as the fallback.
+function iptvUrls(u) {
+  const m = u.match(/^(https?:\/\/[^/]+)\/(?:live\/)?([^/]+)\/([^/]+)\/(\d+)(?:\.ts)?$/);
+  const hls = m ? `${m[1]}/live/${m[2]}/${m[3]}/${m[4]}.m3u8` : '';
+  return hls && hls !== u ? [hls, u] : [u];
+}
+
+function iptvInfo(src) {
+  const d = t => new Date(t * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' });
+  const parts = [src.kind === 'xtream' ? 'Xtream Codes' : T('M3U listesi')];
+  if (src.exp) parts.push(T('Bitiş: {d}', { d: d(src.exp) }));
+  if (src.max) parts.push(T('{n} bağlantı', { n: +src.max }));
+  if (src.shared) parts.push(T('Tüm cihazlarda'));
+  if (src.updated) parts.push(T('Güncellendi: {d}', { d: d(src.updated) }));
+  return `<span class="ip-meta">${esc(parts.join(' · '))}</span>${src.error ? `<span class="ip-warn">${esc(tx(src.error))}</span>` : ''}`;
+}
+
+async function renderIptv(src) {
+  const view = $('#view'), sid = src.id;
+  const head = `<div class="page-head"><h1>${T('Canlı TV')}</h1><span class="count"><span class="lv-dot"></span>${T('{n} kanal', { n: src.count })}</span></div>`;
+  if (!LV.ipGroups[sid]) {
+    view.innerHTML = head + liveSourceBar() + `<div style="height:40vh;display:grid;place-items:center"><div class="spin" style="width:40px;height:40px;border-width:3px"></div></div>`;
+    try { LV.ipGroups[sid] = await api.get(`/api/iptv/${sid}/groups`); }
+    catch {
+      if (S.view === 'live' && LV.src === sid) view.innerHTML = head + liveSourceBar() + `<div class="grid">${emptyState('Kanal listesi alınamadı', 'Lumbuz sunucusuna ulaşılamıyor.', 'live')}</div>`;
+      return;
+    }
+    if (S.view === 'live' && LV.src === sid) renderIptv(src);
+    return;
+  }
+  const groups = LV.ipGroups[sid];
+  const recent = !LV.ipg && !LV.ipq ? store.get(`iptv_recent_${sid}`, []).slice(0, 6).map(it => ipCh(sid, it)) : [];
+  view.innerHTML = head + liveSourceBar() + `
+    <div class="ip-bar">${iptvInfo(src)}
+      <button class="btn btn-ghost btn-sm" data-action="iptv-refresh">${icon('refresh')}${T('Yenile')}</button>
+      <button class="btn btn-ghost btn-sm" data-action="iptv-edit">${icon('settings')}${T('Düzenle')}</button></div>
+    <div class="lv-tools">
+      ${groups.length > 1 ? `<div class="chips" id="lv-chips"><button class="chip${LV.ipg ? '' : ' on'}" data-ipg="">${T('Tümü')}<span class="n">${src.count}</span></button>${groups
+        .map(g => `<button class="chip${LV.ipg === 'g:' + g.n ? ' on' : ''}" data-ipg="g:${esc(g.n)}">${esc(g.n || T('Diğer'))}<span class="n">${g.c}</span></button>`).join('')}</div>` : ''}
+      <label class="o-search-box">${icon('search')}<input id="live-q" type="search" placeholder="${T('Kanal ara…')}" autocomplete="off" spellcheck="false" value="${esc(LV.ipq)}"></label>
+    </div>
+    ${recent.length ? `<h2 class="lv-sec">${T('Son İzlediklerin')}</h2><div class="lv-grid recent">${recent.map(liveCard).join('')}</div><h2 class="lv-sec">${T('Tüm Kanallar')}</h2>` : ''}
+    <div class="lv-grid" id="lv-grid"></div><div class="ip-more" id="ip-more"></div>`;
+  $('#lv-chips .chip.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  const inp = $('#live-q');
+  let t = 0;
+  inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { LV.ipq = inp.value; loadIptvPage(true); }, 300); });
+  loadIptvPage(true);
+}
+
+async function loadIptvPage(reset) {
+  const sid = LV.src, seq = ++LV.ipSeq, grid = $('#lv-grid');
+  if (!grid) return;
+  if (reset) {
+    LV.ipItems = []; LV.ipTotal = 0;
+    grid.innerHTML = `<div class="empty"><div class="spin" style="width:34px;height:34px;border-width:3px;margin:0 auto"></div></div>`;
+  }
+  const g = LV.ipg ? '&g=' + encodeURIComponent(LV.ipg.slice(2)) : '';
+  let d = null;
+  try { d = await api.get(`/api/iptv/${sid}/channels?off=${LV.ipItems.length}&q=${encodeURIComponent(LV.ipq)}${g}`); } catch {}
+  if (seq !== LV.ipSeq || S.view !== 'live' || LV.src !== sid || !$('#lv-grid')) return;
+  if (!d) { grid.innerHTML = emptyState('Kanal listesi alınamadı', 'Lumbuz sunucusuna ulaşılamıyor.', 'live'); return; }
+  const before = LV.ipItems.length;
+  const chs = d.items.map(it => ipCh(sid, it));
+  LV.ipItems.push(...chs);
+  LV.ipTotal = d.total;
+  if (reset) grid.innerHTML = chs.map(liveCard).join('') || emptyState('Kanal bulunamadı', 'Başka bir kategori ya da arama deneyin.', 'live');
+  else {
+    grid.insertAdjacentHTML('beforeend', chs.map(liveCard).join(''));
+    grid.children[before]?.focus();  // the remote carries on from the first new channel
+  }
+  const left = LV.ipTotal - LV.ipItems.length;
+  $('#ip-more').innerHTML = left > 0 ? `<button class="btn btn-ghost btn-sm" data-action="iptv-more">${T('Daha fazla göster ({n})', { n: left })}</button>` : '';
+}
+
+function setIptvGroup(g) {
+  LV.ipg = g;
+  $$('#lv-chips .chip').forEach(b => b.classList.toggle('on', b.dataset.ipg === g));
+  loadIptvPage(true);
+}
+
+async function loadIpRows() {
+  const sid = LV.cur?.src;
+  if (!sid) return;
+  const seq = ++LV.ipRowSeq;
+  const g = LV.pcat ? '&g=' + encodeURIComponent(LV.pcat.slice(2)) : '';
+  try {
+    if (!LV.ipGroups[sid]) LV.ipGroups[sid] = await api.get(`/api/iptv/${sid}/groups`);
+    const d = await api.get(`/api/iptv/${sid}/channels?lim=500${g}`);
+    if (seq === LV.ipRowSeq) LV.ipRows = d.items.map(it => ipCh(sid, it));
+  } catch {}
+  if (seq === LV.ipRowSeq && LV.open && (LV.list || PORTRAIT())) renderLiveList();
+}
+
+/* ---- adding and editing an IPTV list */
+function iptvForm() {
+  let el = $('#iptv-form');
+  if (!el) {
+    document.body.insertAdjacentHTML('beforeend', `<div class="overlay" id="iptv-form" role="dialog" aria-modal="true"><div class="scrim"></div>
+      <div class="sheet-scroll" data-dismiss><div class="sheet ip-sheet" id="ip-sheet"></div></div></div>`);
+    el = $('#iptv-form');
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); $('#ip-sheet [data-action="iptv-save"]')?.click(); }
+    });
+  }
+  return el;
+}
+
+function openIptvForm(src) {
+  const el = iptvForm();
+  const field = (id, label, attrs = '', cls = '') => `<div class="field ${cls}"><label for="${id}">${T(label)}</label><input id="${id}" ${attrs} autocomplete="off" autocapitalize="off" spellcheck="false"></div>`;
+  const share = `<button class="ip-check" data-ipshare aria-pressed="${src?.shared ? 'true' : 'false'}"><span class="box">${icon('check')}</span>${T('Bu sunucuya bağlanan tüm cihazlarda göster')}</button>
+    <p class="ip-note">${T('Kapalıyken liste yalnızca bu cihazda görünür. Açıkken bu Lumbuz’u kullanan herkes aboneliğinizle izleyebilir (TV’de eklemek yerine telefondan eklemek için kullanışlı).')}</p>`;
+  $('#ip-sheet').innerHTML = `<button class="close" data-action="back" aria-label="${T('Kapat')}">${icon('x')}</button><div class="ip-body">` + (src
+    ? `<h2>${T('IPTV listesini düzenle')}</h2><p class="ip-hint">${iptvInfo(src)}</p><div class="form">
+        ${field('ip-name', 'Liste adı', `value="${esc(src.name)}"`)}${share}
+        <div class="ip-err" id="ip-err" hidden></div>
+        <div class="ip-actions"><button class="btn btn-play btn-sm" data-action="iptv-save" data-sid="${src.id}">${T('Kaydet')}</button>
+          <button class="btn btn-ghost btn-sm" data-action="iptv-delete" data-sid="${src.id}">${icon('x')}${T('Listeyi sil')}</button></div></div>`
+    : `<h2>${T('IPTV Ekle')}</h2><p class="ip-hint">${T('IPTV aboneliğiniz varsa kanal listenizi buraya ekleyin. Kanallar bu cihazda, doğrudan sağlayıcınızdan açılır.')}</p>
+      <div class="chips wrap ip-kind"><button class="chip on" data-ipkind="m3u">${T('M3U bağlantısı')}</button><button class="chip" data-ipkind="xtream">Xtream Codes</button></div>
+      <div class="form">
+        ${field('ip-name', 'Liste adı (isteğe bağlı)', `placeholder="${T('Örn. Ev IPTV')}"`)}
+        ${field('ip-url', 'M3U bağlantısı', 'type="url" placeholder="http://…/get.php?username=…&amp;password=…&amp;type=m3u_plus"', 'ip-m3u')}
+        ${field('ip-server', 'Sunucu adresi', 'type="url" placeholder="http://sunucu.com:8080"', 'ip-x')}
+        ${field('ip-user', 'Kullanıcı adı', '', 'ip-x')}
+        ${field('ip-pass', 'Şifre', 'type="password"', 'ip-x')}
+        ${share}
+        <div class="ip-err" id="ip-err" hidden></div>
+        <div class="ip-actions"><button class="btn btn-play btn-sm" data-action="iptv-save">${T('Listeyi ekle')}</button>
+          <button class="btn btn-ghost btn-sm" data-action="back">${T('Vazgeç')}</button></div></div>`) + `</div>`;
+  if (!src) iptvKind('m3u');
+  if (!el.classList.contains('open')) {
+    el.classList.add('open');
+    pushOverlay('iptv', () => el.classList.remove('open'));
+  }
+  setTimeout(() => $(src ? '#ip-name' : '.ip-kind .chip.on')?.focus(), 60);
+}
+
+function iptvKind(kind) {
+  $$('.ip-kind .chip').forEach(b => b.classList.toggle('on', b.dataset.ipkind === kind));
+  $$('#ip-sheet .ip-m3u').forEach(x => { x.hidden = kind !== 'm3u'; });
+  $$('#ip-sheet .ip-x').forEach(x => { x.hidden = kind !== 'xtream'; });
+  $('#ip-sheet').dataset.kind = kind;
+}
+
+function iptvError(msg) {
+  const e = $('#ip-err');
+  if (!e) return toast(msg, 4000);
+  e.textContent = msg;
+  e.hidden = !msg;
+}
+
+async function iptvRequest(method, url, body) {
+  const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const d = r.headers.get('content-type')?.includes('json') ? await r.json() : {};
+  if (!r.ok) throw new Error(d.error ? tx(d.error) : T('Lumbuz sunucusuna ulaşılamıyor.'));
+  return d;
+}
+
+async function iptvAction(a, btn) {
+  const cur = LV.srcs?.find(x => x.id === LV.src);
+  if (a === 'iptv-add') return openIptvForm(null);
+  if (a === 'iptv-edit') return cur && openIptvForm(cur);
+  if (a === 'iptv-more') return loadIptvPage(false);
+  if (a === 'iptv-refresh') {
+    if (!cur || btn.disabled) return;
+    btn.disabled = true;
+    toast(T('Kanal listesi yenileniyor…'), 2000);
+    try {
+      const s = await iptvRequest('POST', `/api/iptv/${cur.id}/refresh`);
+      Object.assign(cur, s);
+      delete LV.ipGroups[cur.id];
+      toast(T('{n} kanal', { n: s.count }));
+    } catch (e) { toast(e.message, 4000); }
+    btn.disabled = false;
+    return S.view === 'live' && renderLive();
+  }
+  if (a === 'iptv-delete') {
+    if (!btn.classList.contains('confirm')) {
+      btn.classList.add('confirm');
+      btn.lastChild.textContent = T('Silmek için tekrar basın');
+      return;
+    }
+    try { await iptvRequest('DELETE', `/api/iptv/${btn.dataset.sid}`); } catch (e) { return iptvError(e.message); }
+    LV.srcs = LV.srcs.filter(x => x.id !== +btn.dataset.sid);
+    store.set(`iptv_recent_${btn.dataset.sid}`, []);
+    back();
+    LV.src = ''; store.set('live_src', '');
+    return renderLive();
+  }
+  if (a === 'iptv-save') {
+    if (btn.disabled) return;
+    const val = id => ($(id)?.value || '').trim();
+    const shared = $('#ip-sheet [data-ipshare]').getAttribute('aria-pressed') === 'true';
+    iptvError('');
+    if (btn.dataset.sid) {
+      try { await iptvRequest('POST', `/api/iptv/${btn.dataset.sid}`, { name: val('#ip-name'), shared }); }
+      catch (e) { return iptvError(e.message); }
+      await loadIptvSources();
+      back();
+      return renderLive();
+    }
+    const kind = $('#ip-sheet').dataset.kind;
+    const body = kind === 'xtream' ? { kind, name: val('#ip-name'), url: val('#ip-server'), username: val('#ip-user'), password: val('#ip-pass'), shared }
+      : { kind, name: val('#ip-name'), url: val('#ip-url'), shared };
+    if (!body.url || (kind === 'xtream' && !(body.username && body.password))) return iptvError(T('Lütfen tüm alanları doldurun.'));
+    const label = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spin" style="width:18px;height:18px;border-width:2px"></span>${T('Liste okunuyor…')}`;
+    try {
+      const s = await iptvRequest('POST', '/api/iptv', body);
+      await loadIptvSources();
+      back();
+      toast(T('{name}: {n} kanal eklendi', { name: esc(s.name), n: s.count }), 3000);
+      LV.src = ''; setLiveSource(s.id);
+    } catch (e) { iptvError(e.message); }
+    btn.disabled = false;
+    btn.innerHTML = label;
+  }
+}
+
 /* ---- player */
-function liveRows() { return liveFilter(LV.pcat); }
+function liveRows() { return LV.cur?.src ? LV.ipRows : liveFilter(LV.pcat); }
+
+// The player's categories: the built-in channels' own, or an IPTV list's groups ('g:<name>').
+function liveListCats() {
+  if (LV.cur?.src) return [{ id: '', n: T('Tümü') }, ...(LV.ipGroups[LV.cur.src] || []).map(g => ({ id: 'g:' + g.n, n: g.n || T('Diğer') }))];
+  return [{ id: '', n: T('Tümü') }, ...LV.data.cats.filter(c => LV.data.channels.some(x => x.cat === c.id)).map(c => ({ id: c.id, n: tx(c.n) }))];
+}
+
+function setLivePcat(id) {
+  LV.pcat = id;
+  LV.hl = null;
+  if (LV.cur?.src) { LV.ipRows = []; loadIpRows(); }
+  renderLiveList();
+  armListHide();
+}
 
 function renderLiveList() {
-  const cats = [{ id: '', n: T('Tümü') }, ...LV.data.cats.filter(c => LV.data.channels.some(x => x.cat === c.id))];
-  $('#l-chips').innerHTML = cats.map(c => `<button class="chip${LV.pcat === c.id ? ' on' : ''}" data-lpcat="${c.id}">${esc(tx(c.n))}</button>`).join('');
+  const cats = liveListCats();
+  $('#l-chips').innerHTML = cats.map(c => `<button class="chip${LV.pcat === c.id ? ' on' : ''}" data-lpcat="${esc(c.id)}">${esc(c.n)}</button>`).join('');
   const rows = liveRows();
   if (!rows.includes(LV.hl)) LV.hl = rows.includes(LV.cur) ? LV.cur : rows[0];
   $('#l-rows').innerHTML = rows.map(ch => `<button class="l-row${ch === LV.hl ? ' hl' : ''}" data-lch="${esc(ch.id)}">
-    <span class="no">${ch.no}</span>${liveLogo(ch)}<span class="txt"><strong>${esc(ch.n)}</strong><span>${esc(LIVE_CAT(ch.cat))} · ${esc(ch.q)}</span></span>
+    <span class="no">${ch.no}</span>${liveLogo(ch)}<span class="txt"><strong>${esc(ch.n)}</strong><span>${esc([liveCat(ch), ch.q].filter(Boolean).join(' · '))}</span></span>
     ${ch === LV.cur ? `<span class="lv-pill">${T('İZLENİYOR')}</span>` : ''}</button>`).join('');
   $('.l-chips .chip.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   $('#l-rows .l-row.hl')?.scrollIntoView({ block: 'nearest' });
@@ -2362,7 +2648,7 @@ function closeLiveList() {
 function showOSD(ch, typed) {
   const osd = $('#l-osd');
   osd.innerHTML = typed ? `<div class="no">${esc(typed)}<span style="opacity:.4">_</span></div>`
-    : `<div class="no">${ch.no}</div>${liveLogo(ch)}<div><strong>${esc(ch.n)}</strong><span>${esc(LIVE_CAT(ch.cat))} · <span class="lv-dot"></span>${T('CANLI')}</span></div>`;
+    : `<div class="no">${ch.no}</div>${liveLogo(ch)}<div><strong>${esc(ch.n)}</strong><span>${esc(liveCat(ch))} · <span class="lv-dot"></span>${T('CANLI')}</span></div>`;
   osd.classList.add('show');
   clearTimeout(LV.osdT);
   LV.osdT = setTimeout(() => osd.classList.remove('show'), typed ? 1600 : 3200);
@@ -2415,12 +2701,18 @@ function stopLiveMedia() {
 }
 
 async function openLive(id) {
-  await loadLive();
-  const ch = LV.data?.channels.find(c => c.id === id);
+  if (!LV.pool.has(id)) await loadLive();
+  const ch = liveFind(id);
   if (!ch) return toast(T('Kanal bulunamadı.'));
   if (!LV.open) {
     LV.open = true;
     LV.pcat = '';
+    if (ch.src) {
+      // The player's list starts as the page's group: the channels already on the page, then the whole group.
+      LV.pcat = LV.ipg;
+      LV.ipRows = LV.ipItems.includes(ch) ? LV.ipItems.slice() : [ch];
+      if (LV.ipq || !LV.ipItems.includes(ch) || LV.ipItems.length < LV.ipTotal) loadIpRows();
+    }
     $('#lplayer').classList.add('open');
     pushOverlay('lplayer', closeLiveNow);
     try { document.activeElement?.blur(); } catch {}
@@ -2434,10 +2726,15 @@ function tuneLive(ch) {
   if (LV.cur && LV.cur !== ch) LV.prev = LV.cur;
   LV.cur = ch;
   const seq = ++LV.seq;
-  store.set('live_last', ch.id);
-  store.set('live_recent', [ch.id, ...store.get('live_recent', []).filter(x => x !== ch.id)].slice(0, 8));
+  if (ch.src) {
+    const key = `iptv_recent_${ch.src}`;
+    store.set(key, [{ n: ch.n, g: ch.cat, logo: ch.logo, url: ch.url, no: ch.no }, ...store.get(key, []).filter(x => x.url !== ch.url)].slice(0, 8));
+  } else {
+    store.set('live_last', ch.id);
+    store.set('live_recent', [ch.id, ...store.get('live_recent', []).filter(x => x !== ch.id)].slice(0, 8));
+  }
   $('#l-title').textContent = ch.n;
-  $('#l-sub').textContent = `${ch.no} · ${LIVE_CAT(ch.cat)} · ${ch.q}`;
+  $('#l-sub').textContent = [ch.no, liveCat(ch), ch.q].filter(Boolean).join(' · ');
   document.title = `${ch.n} · ${T('Canlı TV')} · Lumbuz`;
   $('#l-loading-logo').outerHTML = liveLogo(ch).replace('class="l-logo"', 'class="l-logo" id="l-loading-logo"');
   $('#l-loading').classList.remove('off');
@@ -2458,11 +2755,12 @@ function tuneLive(ch) {
     return;
   }
   // Ways to try, in order: each stream URL with hls.js (or natively), then natively when hls.js was refused.
-  const urls = [ch.url, ...(ch.alt || [])];
+  const urls = ch.src ? iptvUrls(ch.url) : [ch.url, ...(ch.alt || [])];
   const tries = [];
   // Some broadcasters send their playlists without a CORS header, which hls.js needs: the Lumbuz server then
   // passes just the playlist text through (/api/live/pl); the video still comes straight from the broadcaster.
-  const proxied = u => `/api/live/pl/${encodeURIComponent(ch.id)}?u=${encodeURIComponent(u)}`;
+  const proxied = u => (ch.src ? `/api/iptv/pl/${ch.src}?u=${encodeURIComponent(u)}`
+    : `/api/live/pl/${encodeURIComponent(ch.id)}?u=${encodeURIComponent(u)}`);
   urls.forEach(u => {
     if (NATIVE_HLS()) { tries.push(['native', u]); return; }  // Apple and LG play HLS themselves; CORS doesn't apply
     if (ch.cors !== false) tries.push(['hls', u]);
@@ -2519,10 +2817,13 @@ function liveAttempt(ch, tries, i, seq) {
 function liveFailed(ch, code) {
   $('#l-loading').classList.add('off');
   const err = $('#l-error');
-  err.innerHTML = `<b>${T('{name} şu an açılmıyor', { name: esc(ch.n) })}</b>${ch.tr ? T('Bu kanal yalnızca Türkiye içinden izlenebiliyor. ') : ''}${T('Başka bir kanal seçin')}${PORTRAIT() ? '.' : ' (OK).'}`;
+  const why = !ch.src ? (ch.tr ? T('Bu kanal yalnızca Türkiye içinden izlenebiliyor. ') : '')
+    : location.protocol === 'https:' && /^http:/i.test(ch.url) ? T('Bu IPTV yayını şifresiz (http) olduğu için güvenli (https) adreste açılmıyor; Lumbuz’u ev ağındaki adresinden açın. ')
+    : T('IPTV sağlayıcınız yayını vermedi: abonelik süresi ya da aynı anda bağlantı sınırı dolmuş olabilir. ');
+  err.innerHTML = `<b>${T('{name} şu an açılmıyor', { name: esc(ch.n) })}</b>${why}${T('Başka bir kanal seçin')}${PORTRAIT() ? '.' : ' (OK).'}`;
   err.hidden = false;
   if (!LV.list) openLiveList();
-  api.post('/api/live/fail', { id: ch.id, code }).catch(() => {});
+  if (!ch.src) api.post('/api/live/fail', { id: ch.id, code }).catch(() => {});
 }
 
 function zapLive(dir) {
@@ -2537,6 +2838,14 @@ function liveNumber(d) {
   showOSD(null, LV.numBuf);
   clearTimeout(LV.numT);
   LV.numT = setTimeout(() => {
+    const sid = LV.cur?.src;
+    if (sid) {
+      const n = +LV.numBuf;
+      LV.numBuf = '';
+      return api.get(`/api/iptv/${sid}/channels?no=${n}`).then(d => {
+        if (d.items[0]) tuneLive(ipCh(sid, d.items[0])); else toast(T('Bu numarada kanal yok.'), 1500);
+      }).catch(() => {});
+    }
     const ch = LV.data.channels.find(c => c.no === +LV.numBuf);
     LV.numBuf = '';
     if (ch) tuneLive(ch); else toast(T('Bu numarada kanal yok.'), 1500);
@@ -2587,9 +2896,9 @@ $('#lplayer').addEventListener('click', e => {
   const b = e.target.closest('[data-l]');
   if (b) return liveAction(b.dataset.l);
   const c = e.target.closest('[data-lpcat]');
-  if (c) { LV.pcat = c.dataset.lpcat; LV.hl = null; renderLiveList(); return armListHide(); }
+  if (c) return setLivePcat(c.dataset.lpcat);
   const r = e.target.closest('[data-lch]');
-  if (r) { const ch = LV.data.channels.find(x => x.id === r.dataset.lch); LV.hl = ch; tuneLive(ch); return armListHide(); }
+  if (r) { const ch = liveFind(r.dataset.lch); LV.hl = ch; tuneLive(ch); return armListHide(); }
   if (e.target.closest('.l-list')) return armListHide();
   // A tap on the picture shows the controls, a second one opens the list.
   if ($('#lplayer').classList.contains('ui') || LV.list) return LV.list ? closeLiveList() : openLiveList();
@@ -2620,11 +2929,8 @@ window.addEventListener('keydown', e => {
     if (k === 'ArrowUp') { stop(); return liveHighlight(rows[Math.max(0, i - 1)]); }
     if (k === 'ArrowLeft' || k === 'ArrowRight') {
       stop();
-      const cats = ['', ...LV.data.cats.filter(c => LV.data.channels.some(x => x.cat === c.id)).map(c => c.id)];
-      LV.pcat = cats[(cats.indexOf(LV.pcat) + (k === 'ArrowRight' ? 1 : -1) + cats.length) % cats.length];
-      LV.hl = null;
-      renderLiveList();
-      return armListHide();
+      const cats = liveListCats().map(c => c.id);
+      return setLivePcat(cats[(cats.indexOf(LV.pcat) + (k === 'ArrowRight' ? 1 : -1) + cats.length) % cats.length]);
     }
     if (ok) { stop(); if (LV.hl && LV.hl !== LV.cur) tuneLive(LV.hl); return armListHide(); }
     return;
@@ -2655,6 +2961,14 @@ document.addEventListener('click', async e => {
   if (lv) return openLive(lv.dataset.live);
   const lc = t.closest('[data-lcat]');
   if (lc) { LV.cat = lc.dataset.lcat; return renderLive(); }
+  const ls = t.closest('[data-lsrc]');
+  if (ls) return setLiveSource(ls.dataset.lsrc ? +ls.dataset.lsrc : '');
+  const ig = t.closest('[data-ipg]');
+  if (ig) return setIptvGroup(ig.dataset.ipg);
+  const ik = t.closest('[data-ipkind]');
+  if (ik) return iptvKind(ik.dataset.ipkind);
+  const ish = t.closest('[data-ipshare]');
+  if (ish) return ish.setAttribute('aria-pressed', ish.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
   const clip = t.closest('[data-clip]');
   if (clip) { const [list, i] = clip.dataset.clip.split(':'); return playClips(CL.lists[list], +i); }
   const cs = t.closest('[data-csort]');
@@ -2722,6 +3036,7 @@ document.addEventListener('click', async e => {
     if (a === 'kids-surprise') return kidsSurprise();
     if (a === 'online-retry') { OL.error = false; return renderOnline(); }
     if (a === 'live-retry') { LV.error = false; return renderLive(); }
+    if (a.startsWith('iptv-')) return iptvAction(a, act);
     if (a === 'clips-retry') { CL.error = false; return renderClips(); }
     if (a === 'clips-shuffle') return playClips(shuffle(CL.items || []), 0);
     if (a === 'clips-shuffle-artist') return playClips(shuffle(CL.lists.artist || []), 0);
@@ -2737,7 +3052,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && stack.length) { e.preventDefault(); return back(); }
   if (typing) return;
   if (e.key === '/' || (e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); return openSearch(); }
-  if ((e.key === 'Enter' || e.key === ' ') && document.activeElement?.matches('[data-open], [data-play], [data-oplay], [data-live], [data-clip]')) {
+  if ((e.key === 'Enter' || e.key === ' ') && document.activeElement?.matches('[data-open], [data-play], [data-oplay], [data-live], [data-clip], [data-lsrc], [data-ipg]')) {
     e.preventDefault(); document.activeElement.click();
   }
 });

@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS music_videos (id INTEGER PRIMARY KEY AUTOINCREMENT, p
 -- Music video artists: photo and background (files in cache/clip_art), genre, country and biography (clipmeta.py).
 CREATE TABLE IF NOT EXISTS clip_artists (key TEXT PRIMARY KEY, name TEXT, deezer_id INTEGER, photo INTEGER DEFAULT 0,
     bg INTEGER DEFAULT 0, genre TEXT, country TEXT, bio_tr TEXT, bio_en TEXT, fetched_at REAL);
+-- Live TV: a viewer's own IPTV subscription (iptv.py). kind 'm3u' (url = playlist link) or 'xtream' (url = panel
+-- address + username/password). shared = every device of this server sees it. The channel list is in data/iptv/<id>.json.
+CREATE TABLE IF NOT EXISTS iptv_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, viewer TEXT NOT NULL, name TEXT,
+    kind TEXT, url TEXT, username TEXT, password TEXT, shared INTEGER DEFAULT 0, added_at REAL, updated_at REAL,
+    count INTEGER DEFAULT 0, info TEXT, error TEXT);
 CREATE INDEX IF NOT EXISTS idx_episodes_series ON episodes(series_id, season, episode);
 """
 
